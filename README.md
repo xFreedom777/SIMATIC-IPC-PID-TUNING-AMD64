@@ -217,7 +217,7 @@ MITRPHOL-AMD64/
 
 ## 👨‍💻 ผู้พัฒนาและลิขสิทธิ์ (Author & Credits)
 
-* **Lead Automation & OT/IT Engineer:** Dream Piyapong (**[xFreedom777](https://github.com/xFreedom777)**)
+* **Developer / Author:** Dream Piyapong (**[xFreedom777](https://github.com/xFreedom777)**)
 * **Direct Contact:** [xDev.0777@gmail.com](mailto:xDev.0777@gmail.com)
 * **Deployment Site:** Mitr Phol Pin Mill Plant
 * **Release Version:** `v7.0-amd64-production`
