@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIN MILL PLANT GATE VALVE CONTROL AND MONITORING Project</title>
+  <meta name="description" content="Industrial PID Tuning Application for Siemens S7-1200 with PIDCompact V2. Real-time monitoring, parameter configuration, and simulation.">
+  <link rel="stylesheet" href="/css/style.css?v=10">
+  <style>
+    .alarm-banner {
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      animation: pulse-border 2s infinite;
+    }
+    @keyframes pulse-border {
+      0% { border-color: rgba(239, 68, 68, 0.3); }
+      50% { border-color: rgba(239, 68, 68, 0.8); box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+      100% { border-color: rgba(239, 68, 68, 0.3); }
+    }
+    /* ═══════ GOLDEN SPLASH SCREEN CSS ═══════ */
+    #splash-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 1s ease-out, visibility 1s ease-out;
+    }
+    .splash-logo {
+      font-size: 42px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 6px;
+      background: linear-gradient(to right, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: gold-shine 3s linear infinite;
+      filter: drop-shadow(0 0 25px rgba(252, 246, 186, 0.4));
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .splash-sub {
+      color: #bf953f;
+      font-size: 15px;
+      letter-spacing: 3px;
+      opacity: 0.9;
+      text-shadow: 0 0 10px rgba(191, 149, 63, 0.5);
+    }
+    .splash-loader {
+      margin-top: 50px;
+      width: 250px;
+      height: 3px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 0 10px rgba(191, 149, 63, 0.2);
+    }
+    .splash-loader::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, transparent, #fcf6ba, #bf953f, transparent);
+      animation: load-slide 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    @keyframes gold-shine {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes load-slide {
+      0% { left: -50%; }
+      100% { left: 100%; }
+    }
+    .splash-hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+  </style>
+  <!-- Chart.js v2.9.4 is loaded locally at the bottom of the body -->
+</head>
+<body>
+
+<!-- ═══════ GOLDEN SPLASH SCREEN ═══════ -->
+<div id="splash-screen">
+  <div style="display:flex; flex-direction:column; align-items:center;">
+    <div class="splash-logo">SIMATIC IOT2050</div>
+    <div class="splash-sub">ADVANCED PID CONTROL ENGINE</div>
+    <div class="splash-sub" style="margin-top: 8px;">BY DREAM PIYAPONG</div>
+    <div class="splash-loader"></div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ═══════ HEADER ═══════ -->
+  <header class="header">
+    <div class="logo" style="display:flex; align-items:center; gap:10px;">
+      <img src="/logo.png" alt="Mitr Phol Logo" style="height: 38px; border-radius: 6px; background-color: white; padding: 2px;">
+      <div class="logo-text" style="font-size: 13px; line-height: 1.2; text-transform: uppercase;">
+        PIN MILL PLANT<br>
+        <span style="color:var(--primary); font-size: 11px;">GATE VALVE CONTROL AND MONITORING Project</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="status-badge">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+      <span class="mode-chip offline" id="modeChip">OFFLINE</span>
+    </div>
+
+    <div class="header-right">
+      <button class="btn btn-ghost btn-sm" id="perfToggleBtn" onclick="toggleLowPerfMode()" title="Toggle Low Performance Mode for Edge Devices" style="margin-right:15px; font-weight:bold;">🚀 Perf: High</button>
+      <button class="btn btn-ghost btn-sm" onclick="openOffsetModal()" id="offsetBtn" disabled title="Configure DB Offsets">⚙️ DB Offsets</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearHistory()">🧹 Clear History</button>
+      <button class="btn btn-amber btn-sm" onclick="toggleParamLock()" id="lockBtn" title="Parameter Lock">🔒 Locked</button>
+      <button class="btn btn-warning btn-sm" onclick="restartSystem()" style="margin-left: 10px;" title="Restart System">🔄 Restart</button>
+      <button class="btn btn-danger btn-sm" onclick="shutdownSystem()" style="margin-left: 10px;" title="Power Off System">🛑 Power Off</button>
+    </div>
+  </header>
+
+  <!-- ═══════ LAYOUT ═══════ -->
+  <div class="layout">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+
+      <!-- Connection Card -->
+      <div class="card" id="connCard">
+        <div class="card-title">🔌 PLC Connection</div>
+        <div class="connect-form" id="connectForm">
+          <div class="form-group">
+            <label>PLC IP Address</label>
+            <input class="input" id="plcIp" type="text" placeholder="192.168.1.10" value="192.168.1.10">
+          </div>
+          <div class="input-row">
+            <div class="form-group">
+              <label>Rack</label>
+              <input class="input" id="plcRack" type="number" value="0" min="0" max="7">
+            </div>
+            <div class="form-group">
+              <label>Slot</label>
+              <input class="input" id="plcSlot" type="number" value="0" min="0" max="31">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" id="connectBtn" onclick="toggleConnect()">
+            <span>⚡</span> Connect to PLC
+          </button>
+          <button class="btn btn-amber btn-full btn-sm" onclick="startSimulation()" id="simBtn">
+            🔬 Start Simulation
+          </button>
+        </div>
+      </div>
+
+      <!-- PID Loops Card -->
+      <div class="card" style="flex:1;">
+        <div class="card-title row between" style="margin-bottom:10px">
+          <span>🔄 PID Loops</span>
+          <button class="btn btn-xs btn-ghost" onclick="openAddBlockModal()">+ Add</button>
+        </div>
+        <div id="blockList">
+          <div class="empty-state" style="padding:20px">
+            <div class="empty-icon">📊</div>
+            <div class="empty-text text-sm">No loops added yet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick SP Control -->
+      <div class="card" id="spControlCard" style="display:none">
+        <div class="card-title">🎯 Quick Setpoint</div>
+        <div class="form-group">
+          <label id="spLabel">Setpoint</label>
+          <div class="row">
+            <input class="input" id="spInput" type="number" step="0.1" placeholder="0.0">
+            <button class="btn btn-primary btn-sm" onclick="writeSetpoint()">Set</button>
+          </div>
+        </div>
+        <div id="manualOutSection" style="display:none;margin-top:10px">
+          <label class="text-xs text-muted" style="font-weight:600">Manual Output (%)</label>
+          <div class="row" style="margin-bottom:8px">
+            <input class="input" id="manualInput" type="number" min="0" max="100" step="0.1" placeholder="0.0" onkeydown="if(event.key==='Enter')writeManualOutput()">
+            <button class="btn btn-amber btn-sm" onclick="writeManualOutput()">Set</button>
+          </div>
+          <div class="slider-row">
+            <input type="range" id="manualSlider" min="0" max="100" step="0.5" value="50" oninput="onManualSlider(this.value)">
+            <span class="slider-val" id="manualSliderVal">50.0%</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── CONTENT ── -->
+    <main class="content">
+
+      <!-- Mode Control Bar -->
+      <div class="mode-bar">
+        <span class="mode-bar-label">PID Mode:</span>
+        <button class="pid-mode-btn" id="modeInactive" onclick="setPIDMode(0)">⬛ Inactive</button>
+        <button class="pid-mode-btn" id="modeAuto"     onclick="setPIDMode(3)">▶ Auto</button>
+        <button class="pid-mode-btn" id="modeManual"   onclick="setPIDMode(4)">✋ Manual</button>
+        <div class="spacer"></div>
+        <span class="text-xs" id="sysDateTime" style="margin-right: 10px; font-weight: 500; color: var(--text-2); letter-spacing: 0.5px;">Date: --/--/---- Time: --:--:--</span>
+        <button class="btn btn-ghost btn-xs" onclick="openTimeModal()" title="Set System Time" style="margin-right: 15px; padding: 0 5px; font-size: 14px;">⚙</button>
+        <span class="text-xs text-muted" id="stateLabel">State: —</span>
+        <button class="btn btn-xs btn-ghost" onclick="readAllParams()" id="readBtn" disabled>↻ Read PLC</button>
+        <button class="btn btn-xs btn-danger" onclick="resetError()" id="resetErrBtn" style="display:none">⚠ Reset Error</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="trend" onclick="switchTab('trend')">📈 Trend</button>
+        <button class="tab-btn" data-tab="params" onclick="switchTab('params')">⚙ Parameters</button>
+        <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+        <button class="tab-btn" data-tab="simulation" onclick="switchTab('simulation')">⚙️ Simulation</button>
+        <button class="tab-btn" data-tab="datalogging" onclick="switchTab('datalogging')">📁 Data Logging</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content">
+
+        <!-- ═══ TREND ═══ -->
+        <div class="tab-panel active" id="tab-trend">
+          <div class="trend-panel">
+
+            <!-- Live Values -->
+            <div class="live-row">
+              <div class="live-card sp-card">
+                <div class="live-label">Setpoint (SP)</div>
+                <div class="live-value" id="lv-sp">—</div>
+                <div class="live-unit" id="lv-sp-unit"></div>
+              </div>
+              <div class="live-card pv-card">
+                <div class="live-label">Process Value (PV)</div>
+                <div class="live-value" id="lv-pv">—</div>
+                <div class="live-unit" id="lv-pv-unit"></div>
+              </div>
+              <div class="live-card out-card">
+                <div class="live-label">Output</div>
+                <div class="live-value" id="lv-out">—</div>
+                <div class="live-unit" id="lv-out-unit">%</div>
+              </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="chart-wrap" style="flex:1">
+              <div class="chart-toolbar" style="flex-wrap:wrap; gap:8px;">
+                <div class="chart-legend">
+                  <div class="legend-item"><div class="legend-line sp"></div> SP</div>
+                  <div class="legend-item"><div class="legend-line pv"></div> <span id="legendPvText">PV</span> <span id="legendPvMode" style="font-size:10px;color:#4ade80;font-weight:600;">(Smooth)</span></div>
+                  <div class="legend-item" id="legendBandItem"><div class="legend-box" style="width:12px;height:8px;background:rgba(34,197,94,0.25);border:1px solid rgba(34,197,94,0.4);border-radius:2px;display:inline-block;margin-right:2px;"></div> Noise Band</div>
+                  <div class="legend-item"><div class="legend-line output"></div> Output %</div>
+                </div>
+                <div class="row" style="gap:8px;align-items:center;">
+                  <button id="btnFilterToggle" class="btn btn-xs" onclick="toggleSmoothFilter()" title="Toggle between Smooth (Filtered) and Raw Data" style="height:32px;padding:4px 12px;font-size:12px;font-weight:600;background:rgba(34,197,94,0.18);border:1px solid #22c55e;color:#4ade80;border-radius:6px;cursor:pointer;touch-action:manipulation;">🌿 Smooth</button>
+                  <span class="text-xs text-muted" style="margin-left:4px;font-size:12px;">Range:</span>
+                  <select class="input" id="chartYScale" style="height:32px;min-width:115px;padding:4px 10px;font-size:12px;border-radius:6px;touch-action:manipulation;" onchange="setChartYScale(this.value)">
+                    <option value="200" selected>-0.1 - 200</option>
+                    <option value="auto">Auto Zoom</option>
+                    <option value="50">0 - 50</option>
+                    <option value="100">0 - 100</option>
+                    <option value="250">0 - 250</option>
+                  </select>
+                  <button class="btn btn-xs btn-ghost" onclick="exportChartCSV()" style="height:32px;padding:4px 10px;font-size:12px;border-radius:6px;touch-action:manipulation;" title="Export graph history to CSV">💾 CSV</button>
+                  <span class="text-xs text-muted" style="font-size:12px;">Window:</span>
+                  <select class="input" id="chartWindow" style="height:32px;width:80px;padding:4px 8px;font-size:12px;border-radius:6px;touch-action:manipulation;" onchange="setChartWindow(this.value)">
+                    <option value="1">1 min</option>
+                    <option value="5" selected>5 min</option>
+                    <option value="10">10 min</option>
+                    <option value="30">30 min</option>
+                  </select>
+                </div>
+              </div>
+              <div style="position:relative;height:calc(100% - 40px)">
+                <div id="chartOfflineOverlay" class="chart-offline-overlay" style="display:none;">
+                  <div class="offline-overlay-content">
+                    <div class="offline-icon">⚠️</div>
+                    <div class="offline-title">CABLE DISCONNECTED / PLC OFFLINE</div>
+                    <div class="offline-subtitle">Ethernet cable unplugged or S7-1200 connection lost</div>
+                    <div class="offline-spinner">🔄 Auto-reconnecting in background...</div>
+                  </div>
+                </div>
+                <canvas id="trendChart"></canvas>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ═══ PARAMETERS ═══ -->
+        <div class="tab-panel" id="tab-params">
+          <!-- Lock Banner -->
+          <div id="lockBanner" style="display:none;padding:8px 14px;background:rgba(245,158,11,0.12);border-bottom:1px solid rgba(245,158,11,0.25);">
+            <div class="row" style="gap:8px">
+              <span style="font-size:13px">🔒</span>
+              <span class="text-sm" style="color:var(--amber);font-weight:500">Parameters are locked. Click the lock button in the header to unlock.</span>
+            </div>
+          </div>
+          <div class="param-scroll" id="paramScroll">
+            <div class="empty-state">
+              <div class="empty-icon">⚙</div>
+              <div class="empty-text">Select a PID loop to view parameters</div>
+            </div>
+          </div>
+          <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;justify-content:flex-end" id="paramActions">
+            <span id="lockStatusLabel" class="text-xs text-muted"></span>
+            <button class="btn btn-ghost" onclick="readAllParams()" id="readParamBtn">↻ Read from PLC</button>
+            <button class="btn btn-primary" onclick="writeAllParams()" id="writeParamBtn">💾 Write to PLC / Sim</button>
+          </div>
+        </div>
+
+        <!-- ═══ DASHBOARD ═══ -->
+        <div class="tab-panel" id="tab-dashboard">
+          <div class="dashboard-scroll">
+
+            <div class="card-title" style="margin-bottom:12px">📊 Performance Analytics</div>
+            <div class="kpi-grid" id="kpiGrid">
+              <div class="kpi-card"><div class="kpi-icon">📏</div><div class="kpi-label">Current Error</div><div class="kpi-value" id="kpi-error">—</div><div class="kpi-sub">SP - PV</div></div>
+              <div class="kpi-card"><div class="kpi-icon">🚀</div><div class="kpi-label">Overshoot</div><div class="kpi-value" id="kpi-overshoot">—</div><div class="kpi-sub">% of step</div></div>
+              <div class="kpi-card"><div class="kpi-icon">⏱</div><div class="kpi-label">Rise Time</div><div class="kpi-value" id="kpi-rise">—</div><div class="kpi-sub">10% → 90% of SP</div></div>
+              <div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-label">Settling Time</div><div class="kpi-value" id="kpi-settle">—</div><div class="kpi-sub">within ±2% band</div></div>
+              <div class="kpi-card"><div class="kpi-icon">∫</div><div class="kpi-label">IAE (60s)</div><div class="kpi-value" id="kpi-iae">—</div><div class="kpi-sub">Integral Abs Error</div></div>
+              <div class="kpi-card"><div class="kpi-icon">∫²</div><div class="kpi-label">ISE (60s)</div><div class="kpi-value" id="kpi-ise">—</div><div class="kpi-sub">Integral Sq Error</div></div>
+              <div class="kpi-card"><div class="kpi-icon">📊</div><div class="kpi-label">RMSE (60s)</div><div class="kpi-value" id="kpi-rmse">—</div><div class="kpi-sub">Root Mean Sq Error</div></div>
+              <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-label">Avg Output</div><div class="kpi-value" id="kpi-avgout">—</div><div class="kpi-sub">Mean control effort %</div></div>
+            </div>
+
+            <div class="dash-chart-grid">
+              <div class="dash-chart-card">
+                <div class="dash-chart-title">Error Distribution (last 5 min)</div>
+                <div style="position:relative;height:160px;width:100%">
+                  <canvas id="errorChart"></canvas>
+                </div>
+              </div>
+              <div class="dash-chart-card">
+                <div class="dash-chart-title">Output Histogram (last 5 min)</div>
+                <div style="position:relative;height:160px;width:100%">
+                  <canvas id="outputChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alarm History Section -->
+            <div class="card-title" style="margin-top:24px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🚨 Alarm History</span>
+              <button class="btn btn-xs btn-ghost" onclick="clearAlarmHistory()">🗑 Clear Alarms</button>
+            </div>
+            <div class="card" style="padding:0; overflow:hidden;">
+              <table class="table" style="width:100%; text-align:left; font-size:13px; border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border); background:rgba(0,0,0,0.2);">
+                    <th style="padding:10px 14px; width:100px;">Time</th>
+                    <th style="padding:10px 14px; width:220px;">Alarm</th>
+                    <th style="padding:10px 14px;">Troubleshooting / Fix</th>
+                  </tr>
+                </thead>
+                <tbody id="alarmHistoryBody">
+                  <tr><td colspan="3" style="text-align:center; padding:20px; color:var(--text-muted);">No alarms recorded yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ═══ SIMULATION ═══ -->
+        <div class="tab-panel" id="tab-simulation">
+          <div class="sim-scroll">
+            <div class="sim-grid">
+
+              <!-- Process Model -->
+              <div class="card">
+                <div class="card-title">🏭 Process Model (FOPDT)</div>
+                <p class="text-xs text-muted" style="margin-bottom:12px">G(s) = K·e<sup>-Ls</sup> / (Ts+1)</p>
+
+                <div class="form-group">
+                  <label>Process Gain (K)</label>
+                  <div class="slider-row">
+                    <input type="range" id="simK" min="0.1" max="5" step="0.05" value="1" oninput="updateSimParam('K',this.value)">
+                    <span class="slider-val" id="simKVal">1.00</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Time Constant T (s)</label>
+                  <div class="slider-row">
+                    <input type="range" id="simT" min="1" max="120" step="1" value="10" oninput="updateSimParam('T',this.value)">
+                    <span class="slider-val" id="simTVal">10</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Dead Time L (s)</label>
+                  <div class="slider-row">
+                    <input type="range" id="simL" min="0" max="30" step="0.5" value="2" oninput="updateSimParam('L',this.value)">
+                    <span class="slider-val" id="simLVal">2.0</span>
+                  </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="row between">
+                  <button class="btn btn-amber btn-sm" onclick="startSimulation()">▶ Start Simulation</button>
+                  <button class="btn btn-ghost btn-sm" onclick="stopSimulation()">⬛ Stop</button>
+                </div>
+              </div>
+
+              <!-- IMC Tuning Calculator -->
+              <div class="card">
+                <div class="card-title">🧮 Auto-Tune Calculator</div>
+                <p class="text-xs text-muted" style="margin-bottom:12px">Based on current process model (K, T, L)</p>
+
+                <div class="form-group">
+                  <label>λ — Desired Response Speed (s)</label>
+                  <div class="slider-row">
+                    <input type="range" id="simLambda" min="1" max="60" step="0.5" value="5" oninput="updateLambda(this.value)">
+                    <span class="slider-val" id="simLambdaVal">5.0</span>
+                  </div>
+                  <span class="text-xs text-muted">Smaller λ = faster response (less robust)</span>
+                </div>
+
+                <button class="btn btn-primary btn-sm btn-full" onclick="calculateTuning()" style="margin:10px 0">⚡ Calculate Tuning</button>
+
+                <table class="tune-table" id="tuneTable">
+                  <thead>
+                    <tr>
+                      <th>Method</th>
+                      <th>Kp</th>
+                      <th>Ti (s)</th>
+                      <th>Td (s)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tuneBody">
+                    <tr><td colspan="5" class="text-muted text-xs" style="padding:10px;text-align:center">Click Calculate to see tuning suggestions</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Step Test -->
+              <div class="card">
+                <div class="card-title">📐 Step Test (Simulation)</div>
+                <p class="text-xs text-muted" style="margin-bottom:12px">Apply a step change to SP and observe response</p>
+                <div class="form-group">
+                  <label>Initial SP</label>
+                  <input class="input" id="stepFrom" type="number" value="30">
+                </div>
+                <div class="form-group">
+                  <label>Step SP</label>
+                  <input class="input" id="stepTo" type="number" value="70">
+                </div>
+                <button class="btn btn-primary btn-sm btn-full" onclick="doStepTest()">▶ Apply Step</button>
+                <p class="text-xs text-muted" style="margin-top:8px">View results in Trend and Dashboard tabs</p>
+              </div>
+
+              <!-- Simulation Notes -->
+              <div class="card">
+                <div class="card-title">📋 PIDCompact V2 Offset Guide</div>
+                <p class="text-xs text-muted" style="margin-bottom:10px">
+                  To find correct byte offsets in TIA Portal V19:
+                </p>
+                <ol style="font-size:12px;color:var(--text-2);padding-left:16px;line-height:1.8">
+                  <li>Open the PIDCompact instance DB</li>
+                  <li>In the DB editor, enable <strong style="color:var(--cyan)">Offset</strong> column</li>
+                  <li>Find each parameter's byte offset</li>
+                  <li>Click <strong style="color:var(--cyan)">🗂 DB Offsets</strong> in the header</li>
+                  <li>Enter the correct offsets for your version</li>
+                </ol>
+                <div class="divider"></div>
+                <p class="text-xs text-muted">
+                  ⚠ Also enable <strong style="color:var(--amber)">Permit access with PUT/GET</strong> in:<br>
+                  PLC Properties → Protection → Connection mechanisms
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ── DATA LOGGING ── -->
+        <div class="tab-panel" id="tab-datalogging">
+          <div class="sim-scroll">
+            <div class="sim-grid">
+              
+              <!-- Logging Settings -->
+              <div class="card">
+                <div class="card-title">⚙️ Logging Configuration</div>
+                
+                <div class="form-group" style="margin-top:15px">
+                  <label>Select Topic (PID Loop)</label>
+                  <select class="input" id="dlTopicSelect" onchange="dlLoadSettings()">
+                    <option value="">-- Select Loop --</option>
+                  </select>
+                </div>
+                
+                <div class="row" style="margin-top:15px">
+                  <div class="form-group" style="flex:1">
+                    <label>Stamp Interval</label>
+                    <select class="input" id="dlInterval">
+                      <option value="1">1 Second</option>
+                      <option value="5">5 Seconds</option>
+                      <option value="10">10 Seconds</option>
+                      <option value="30">30 Seconds</option>
+                      <option value="60">1 Minute</option>
+                      <option value="300">5 Minutes</option>
+                      <option value="3600">1 Hour</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex:1">
+                    <label>Auto-Clear History</label>
+                    <select class="input" id="dlAutoClear">
+                      <option value="1">Older than 1 Month</option>
+                      <option value="3">Older than 3 Months</option>
+                      <option value="6">Older than 6 Months</option>
+                      <option value="12">Older than 12 Months</option>
+                      <option value="24">Older than 24 Months</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top:15px">
+                  <label style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Storage Location Path (Leave blank for default: ./logs)</span>
+                    <button class="btn btn-ghost btn-xs" onclick="scanDrives()" type="button">🔍 Scan USB</button>
+                  </label>
+                  <input class="input" type="text" id="dlPath" list="driveList" placeholder="/media/usb or C:\Logs">
+                  <datalist id="driveList"></datalist>
+                  <p class="text-xs text-muted" style="margin-top:4px">Server needs write permission to this directory</p>
+                </div>
+
+                <div class="row" style="margin-top:15px; justify-content:flex-end">
+                  <button class="btn btn-primary btn-sm" onclick="dlSaveSettings()">💾 Save Settings</button>
+                </div>
+              </div>
+
+              <!-- USB Management -->
+              <div class="card">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>🔌 USB Drive Management</span>
+                  <span id="usbStatusBadge" style="font-size:12px; padding:4px 8px; border-radius:4px; background:var(--bg-lighter); color:var(--text-muted)">Checking...</span>
+                </div>
+                <p class="text-xs text-muted" style="margin-top:10px; margin-bottom:15px">
+                  Click Mount when you insert a new flash drive. Click Eject before removing it to prevent data loss.
+                </p>
+                <div class="row" style="gap:10px">
+                  <button class="btn btn-primary" style="flex:1" onclick="usbMount()">🔌 Mount USB</button>
+                  <button class="btn btn-danger" style="flex:1" onclick="usbEject()">⏏️ Eject Safely</button>
+                </div>
+
+                <!-- One-Click Save to USB (Thai Operator Mode) -->
+                <div style="margin-top:18px; border-top:1px solid rgba(255,255,255,0.08); padding-top:16px;">
+                  <div id="usbSaveStatus" style="display:none; font-size:12px; color:#f59e0b; margin-bottom:8px; text-align:center; padding:6px; background:rgba(251,191,36,0.1); border-radius:6px;"></div>
+                  <button id="usbSaveAllBtn"
+                    onclick="usbSaveAll()"
+                    style="width:100%; padding:14px; font-size:15px; font-weight:700; background:linear-gradient(135deg,#0ea5e9,#0284c7); color:white; border:none; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; box-shadow:0 4px 15px rgba(14,165,233,0.35);">
+                    &#128229;&nbsp; Save Log to USB
+                  </button>
+                  <p style="margin-top:8px; font-size:11px; color:var(--text-muted); text-align:center;">Press once &rarr; System copies all logs &rarr; Safe to remove USB</p>
+                </div>
+
+              </div>
+
+              <!-- Export & Downloads -->
+              <div class="card">
+                <div class="card-title">📥 Export & Downloads</div>
+                <div class="row between" style="margin-top:15px; margin-bottom:15px">
+                  <button class="btn btn-ghost btn-sm" style="color:var(--cyan); border:1px solid var(--cyan)" onclick="dlRefreshLogs()">🔄 Refresh List</button>
+                  <div class="row">
+                    <button class="btn btn-amber btn-sm" onclick="dlExportPDF()">📄 Export Latest to PDF</button>
+                      <button class="btn btn-ghost btn-sm" style="color:#00ff88; border:1px solid #00ff88; margin-left:6px;" onclick="exportChartPNG()">📸 Chart PNG</button>
+                  </div>
+                </div>
+                
+                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                  <table class="data-table" style="width:100%">
+                    <thead>
+                      <tr>
+                        <th>Date / File Name</th>
+                        <th style="text-align:right">Size</th>
+                        <th style="text-align:center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dlLogsTable">
+                      <tr><td colspan="3" style="text-align:center;color:var(--text-muted)">Select a topic to view logs</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- Live Data Preview -->
+              <div class="card" style="grid-column: 1 / -1;">
+                <div class="card-title">🟢 Live Data Preview (Currently Logging)</div>
+                <div class="hero-stats" style="margin-top:15px">
+                  <div class="stat-box">
+                    <div class="stat-label">SETPOINT (SP)</div>
+                    <div class="stat-val text-cyan" id="dlLiveSp">0.00</div>
+                    <div class="stat-unit" id="dlUnitSp">-</div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-label">PROCESS VALUE (PV)</div>
+                    <div class="stat-val text-green" id="dlLivePv">0.00</div>
+                    <div class="stat-unit" id="dlUnitPv">-</div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-label">OUTPUT</div>
+                    <div class="stat-val text-amber" id="dlLiveOut">0.00</div>
+                    <div class="stat-unit">%</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab-content -->
+    </main>
+  </div><!-- /layout -->
+</div><!-- /app -->
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ══════════════════════════════════════
+     MODALS
+══════════════════════════════════════ -->
+
+<!-- Add Block Modal -->
+<div class="modal-overlay" id="addBlockModal" style="display:none" onclick="closeModal('addBlockModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">➕ Add PID Loop</span>
+      <button class="modal-close" onclick="closeModal('addBlockModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Loop Name</label>
+      <input class="input" id="newBlockName" placeholder="e.g. Temperature Loop 1">
+    </div>
+    <div class="form-group">
+      <label>Instance DB Number</label>
+      <input class="input" id="newBlockDB" type="number" placeholder="e.g. 10" min="1">
+    </div>
+    <div class="input-row">
+      <div class="form-group">
+        <label>SP Unit</label>
+        <input class="input" id="newBlockSpUnit" placeholder="e.g. °C">
+      </div>
+      <div class="form-group">
+        <label>PV Unit</label>
+        <input class="input" id="newBlockPvUnit" placeholder="e.g. °C">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addBlockModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAddBlock()">Add Loop</button>
+    </div>
+  </div>
+</div>
+
+<!-- DB Offset Config Modal -->
+<div class="modal-overlay" id="offsetModal" style="display:none" onclick="closeModal('offsetModal')">
+  <div class="modal modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🗂 DB Byte Offset Configuration</span>
+      <button class="modal-close" onclick="closeModal('offsetModal')">✕</button>
+    </div>
+    <p class="text-xs text-muted" style="margin-bottom:14px">
+      Verify these byte offsets from TIA Portal → DB Editor → Offset column for PIDCompact V2.
+      Defaults are estimates for TIA V17/V18/V19.
+    </p>
+    <div style="max-height:50vh;overflow-y:auto">
+      <table class="offset-table">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Tag</th>
+            <th>Type</th>
+            <th>Byte Offset</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="offsetTableBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="resetOffsets()">↺ Reset Defaults</button>
+      <button class="btn btn-ghost" onclick="closeModal('offsetModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOffsets()">💾 Save Offsets</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PIN Unlock Modal ── -->
+<div class="modal-overlay" id="pinModal" style="display:none" onclick="closeModal('pinModal')">
+  <div class="modal" style="width:340px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🔓 Enter PIN to Unlock</span>
+      <button class="modal-close" onclick="closeModal('pinModal')">✕</button>
+    </div>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Enter the 4-digit PIN to allow parameter editing.</p>
+    <div class="form-group">
+      <label>PIN</label>
+      <input class="input" id="pinInput" type="password" maxlength="8" placeholder="••••"
+             style="font-size:22px;letter-spacing:8px;text-align:center"
+             onkeydown="if(event.key==='Enter') confirmPin()">
+      <span id="pinError" class="text-xs" style="color:var(--red);display:none;margin-top:4px">❌ Incorrect PIN</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('pinModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPin()">🔓 Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Change PIN Modal ── -->
+<div class="modal-overlay" id="changePinModal" style="display:none" onclick="closeModal('changePinModal')">
+  <div class="modal" style="width:360px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🔑 Change PIN</span>
+      <button class="modal-close" onclick="closeModal('changePinModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Current PIN</label>
+      <input class="input" id="cpOldPin" type="password" maxlength="8" placeholder="Current PIN">
+    </div>
+    <div class="form-group">
+      <label>New PIN</label>
+      <input class="input" id="cpNewPin" type="password" maxlength="8" placeholder="New PIN (4–8 digits)">
+    </div>
+    <div class="form-group">
+      <label>Confirm New PIN</label>
+      <input class="input" id="cpConfirmPin" type="password" maxlength="8" placeholder="Confirm New PIN">
+    </div>
+    <span id="cpError" class="text-xs" style="color:var(--red);display:none">❌ Error</span>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('changePinModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmChangePin()">💾 Save PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- Splash Screen Script -->
+<script>
+  window.addEventListener('load', () => {
+    // 10 seconds of golden aura before fading out
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      if(splash) {
+        splash.classList.add('splash-hidden');
+        setTimeout(() => {
+          splash.style.display = 'none';
+        }, 1000); // wait for fade transition to finish
+      }
+    }, 10000);
+  });
+</script>
+
+    <!-- Scripts -->
+<script src="/js/jspdf.umd.min.js"></script>
+<script src="/js/jspdf.plugin.autotable.min.js"></script>
+<script src="/js/chart.js?v=11"></script>
+<script src="/js/app.js?v=100"></script>
+  <!-- Time Setup Modal -->
+  <div class="modal-overlay" id="timeModal" style="display:none" onclick="closeModal('timeModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">⚙ Set System Time</span>
+        <button class="modal-close" onclick="closeModal('timeModal')">✕</button>
+      </div>
+      <div class="form-group" style="margin-top: 15px;">
+        <label>Date & Time (DD/MM/YYYY HH:MM:SS)</label>
+        <input class="input" id="timeInput" type="text" placeholder="29/07/2026 18:30:00">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-warning" onclick="syncTimeFromPLCNow()" style="margin-right:auto; font-weight:600">⚡ Sync from S7 DB120</button>
+        <button class="btn btn-ghost" onclick="closeModal('timeModal')">Cancel</button>
+        <button class="btn btn-cyan" onclick="saveSystemTime()">Save to IOT2050</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

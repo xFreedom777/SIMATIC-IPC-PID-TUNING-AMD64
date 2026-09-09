@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stability Test Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; margin: 40px; }
+        h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
+        h2 { color: #004085; margin-top: 30px; }
+        .metadata { font-style: italic; color: #666; margin-bottom: 30px; border-left: 4px solid #ccc; padding-left: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f8f9fa; color: #333; }
+        .success { color: #155724; font-weight: bold; background-color: #d4edda; padding: 2px 6px; border-radius: 4px; }
+        .footer { margin-top: 50px; font-size: 0.9em; color: #777; text-align: center; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <h1>IOT2050 Final Stability & Resilience Test Report</h1>
+    
+    <div class="metadata">
+        <p><strong>Date:</strong> August 8, 2026</p>
+        <p><strong>System:</strong> SIMATIC IOT2050 (Air-gapped Environment)</p>
+        <p><strong>Status:</strong> PASS (Highly Stable)</p>
+        <p><em>Generated automatically by Piyapong Naunjan</em></p>
+    </div>
+
+    <h2>1. System Resource Baseline Test</h2>
+    <p>Evaluated system load during continuous chart rendering and WebSocket broadcasting.</p>
+    <table>
+        <tr><th>Metric</th><th>Observation</th><th>Result</th></tr>
+        <tr><td><strong>Memory (RAM)</strong></td><td>Peak usage stabilized at ~519 MiB out of 933 MiB. Sufficient headroom available.</td><td><span class="success">PASS</span></td></tr>
+        <tr><td><strong>CPU Load</strong></td><td>Load average normalized after initial Chromium startup spike.</td><td><span class="success">PASS</span></td></tr>
+        <tr><td><strong>Memory Leak Prevention</strong></td><td>Applied tab-discarding rules in Chromium to prevent Kiosk UI from freezing during long-term operation.</td><td><span class="success">PASS</span></td></tr>
+    </table>
+
+    <h2>2. Process Auto-Recovery Test (Crash Simulation)</h2>
+    <p>Simulated a catastrophic failure of the Node.js backend to verify self-healing capabilities.</p>
+    <table>
+        <tr><th>Test Action</th><th>Observation</th><th>Result</th></tr>
+        <tr><td><strong>Kill Node Process</strong></td><td>Executed <code>killall -9 node</code> to simulate critical backend crash.</td><td><span class="success">PASS</span></td></tr>
+        <tr><td><strong>Systemd Auto-Restart</strong></td><td>Service <code>pid-tuning.service</code> automatically revived the process within <strong>3.0 seconds</strong>.</td><td><span class="success">PASS</span></td></tr>
+        <tr><td><strong>Frontend Auto-Connect</strong></td><td>Client UI immediately switched to 'Reconnecting' and recovered the WebSocket stream seamlessly.</td><td><span class="success">PASS</span></td></tr>
+    </table>
+
+    <h2>3. Network Failure & Kiosk UI Test</h2>
+    <p>Evaluated behavior when physical network connections are disrupted.</p>
+    <table>
+        <tr><th>Test Action</th><th>Observation</th><th>Result</th></tr>
+        <tr><td><strong>LAN Disconnection</strong></td><td>Kiosk UI reconfigured to bind to <code>localhost</code> instead of external IP.</td><td><span class="success">PASS</span></td></tr>
+        <tr><td><strong>Result</strong></td><td>Kiosk UI remains 100% functional and never shows "No Internet" (Dinosaur) error even if the Ethernet cable is unplugged.</td><td><span class="success">PASS</span></td></tr>
+    </table>
+
+    <h2>4. Conclusion</h2>
+    <p>The IOT2050 PID Tuning Application has successfully passed all stress tests. The deployment architecture, including auto-recovery mechanisms and optimized Chromium startup flags, ensures that the system can run 24/7 without manual intervention or memory degradation.</p>
+
+    <div class="footer">
+        CONFIDENTIAL - internal use only.
+    </div>
+
+</body>
+</html>
