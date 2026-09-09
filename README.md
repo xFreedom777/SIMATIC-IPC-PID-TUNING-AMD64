@@ -7,13 +7,13 @@
 <div align="center">
 
 ```ascii
- ███████╗███████╗      ██╗██████╗  ██████╗  ██████╗     ██╗██████╗  ██████╗
- ██╔════╝╚════██║     ███║╚════██╗██╔═████╗██╔════╝     ██║██╔══██╗██╔════╝
- ███████╗    ██╔╝     ╚██║ █████╔╝██║██╔██║███████╗     ██║██████╔╝██║     
- ╚════██║   ██╔╝       ██║██╔═══╝ ████╔╝██║██╔═══██╗    ██║██╔═══╝ ██║     
- ███████║   ██║        ██║███████╗╚██████╔╝╚██████╔╝    ██║██║     ╚██████╗
- ╚══════╝   ╚═╝        ╚═╝╚══════╝ ╚═════╝  ╚═════╝     ╚═╝╚═╝      ╚═════╝
- ─── 24/7 HIGH-AVAILABILITY INDUSTRIAL AUTOMATION & PROCESS CONTROL ───
+ ███████╗███████╗    ██╗██████╗ ██╗██╗  ██╗    ██╗██████╗  ██████╗
+ ██╔════╝╚════██║    ██║╚════██╗██║██║  ██║    ██║██╔══██╗██╔════╝
+ ███████╗    ██╔╝    ██║ █████╔╝██║███████║    ██║██████╔╝██║     
+ ╚════██║   ██╔╝     ██║██╔═══╝ ██║╚════██║    ██║██╔═══╝ ██║     
+ ███████║   ██║      ██║███████╗██║     ██║    ██║██║     ╚██████╗
+ ╚══════╝   ╚═╝      ╚═╝╚══════╝╚═╝     ╚═╝    ╚═╝╚═╝      ╚═════╝
+ ─── S 7 - 1 2 1 4 C   I P C   M I T R P H O L   E D I T I O N ───
 ```
 
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%20LTS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -35,7 +35,7 @@
 
 ## 1. Plant Context & Executive Summary
 
-The **SIMATIC S7-1200 PID Tuning & Monitoring Suite (V7.0)** is an industrial-grade process automation software package deployed at **Mitr Phol Pin Mill Plant**. It is specifically engineered to regulate high-precision **Gate Valve positions and fluid flow loops** driven by **Siemens S7-1200 PLCs (PIDCompact V2 algorithm)**.
+The **SIMATIC S7-1200 PID Tuning & Monitoring Suite (V7.0)** is an industrial-grade process automation software package deployed at **Mitr Phol Pin Mill Plant**. It is specifically engineered to regulate high-precision **Gate Valve positions and fluid flow loops** driven by **Siemens S7-1214C PLCs (PIDCompact V2 algorithm)**.
 
 This system bridges the gap between **Operational Technology (OT)** and **Information Technology (IT)** by providing a 60 FPS real-time operator HMI, non-intrusive online PID parameter calibration, automated telemetry data logging, and complete immunity to industrial power fluctuations.
 
@@ -87,7 +87,7 @@ The architecture has been evolved to **Lenovo ThinkCentre M70q / M80q Tiny (x86_
                                                    v
                             ╔═══════════════════════════════════════╗
                             ║          SIEMENS S7-1200 PLC          ║
-                            ║   CPU 1214C / 1215C (DC/DC/DC)        ║
+                            ║   CPU 1214C (DC/DC/DC) (DC/DC/DC)        ║
                             ║   ─────────────────────────────────   ║
                             ║   • PIDCompact V2 Function Block      ║
                             ║   • DB120: Process Data Block         ║
@@ -162,7 +162,7 @@ sudo reboot
 
 ## 1. บทนำและบริบทหน้างาน (Plant Context)
 
-ระบบ **SIMATIC S7-1200 PID Tuning & Monitoring Suite (V7.0)** พัฒนาขึ้นเพื่อควบคุม **Gate Valve และลูปควบคุมอัตราการไหล** ในไลน์การผลิต **Mitr Phol Pin Mill Plant** โดยสื่อสารโดยตรงกับฟังก์ชันบล็อก **PIDCompact V2** บน **Siemens S7-1200 PLC**
+ระบบ **SIMATIC S7-1200 PID Tuning & Monitoring Suite (V7.0)** พัฒนาขึ้นเพื่อควบคุม **Gate Valve และลูปควบคุมอัตราการไหล** ในไลน์การผลิต **Mitr Phol Pin Mill Plant** โดยสื่อสารโดยตรงกับฟังก์ชันบล็อก **PIDCompact V2** บน **Siemens S7-1214C PLC**
 
 ระบบนี้ถูกออกแบบมาเพื่อแก้ปัญหาระบบกระตุก จอดำ และความเสี่ยงจากไฟดับในโรงงาน โดยยกระดับสถาปัตยกรรมจากบอร์ด Edge Gateway ขึ้นสู่ **Industrial PC (Lenovo ThinkCentre Tiny AMD64)**
 
