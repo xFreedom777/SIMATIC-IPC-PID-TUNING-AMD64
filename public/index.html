@@ -992,7 +992,7 @@
     async function handleDevConnectionClick() {
       if (devWifiState.connected) {
         // User wants to disconnect (turns gray)
-        const confirmed = confirm(`คุณต้องการตัดการเชื่อมต่อจาก Wi-Fi "${devWifiState.ssid}" หรือไม่?`);
+        const confirmed = confirm(`Do you want to disconnect from Wi-Fi "${devWifiState.ssid}"?`);
         if (confirmed) {
           await disconnectWifiNow();
         }
@@ -1083,7 +1083,7 @@
 
       btn.disabled = true;
       btn.textContent = 'Connecting...';
-      showWifiAlert('กำลังเชื่อมต่อ Wi-Fi "' + ssid + '" กรุณารอสักครู่...', 'info');
+      showWifiAlert('Connecting to Wi-Fi "' + ssid + '", please wait...', 'info');
 
       try {
         const res = await fetch('/api/wifi/connect', {
@@ -1094,7 +1094,7 @@
         const data = await res.json();
 
         if (res.ok && data.success) {
-          showWifiAlert('✅ เชื่อมต่อ ' + ssid + ' สำเร็จ!', 'success');
+          showWifiAlert('✅ Connected to ' + ssid + ' successfully!', 'success');
           updateDevConnButtonUI(true, ssid);
           updateModalWifiStatus(true, ssid);
           cancelWifiConnectForm();
@@ -1106,10 +1106,10 @@
             }
           }, 1500);
         } else {
-          showWifiAlert('❌ เชื่อมต่อไม่สำเร็จ: ' + (data.error || 'เกิดข้อผิดพลาด'), 'error');
+          showWifiAlert('❌ Connection failed: ' + (data.error || 'Unknown error'), 'error');
         }
       } catch (err) {
-        showWifiAlert('❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + err.message, 'error');
+        showWifiAlert('❌ Connection error: ' + err.message, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = '⚡ Connect';
@@ -1118,12 +1118,12 @@
 
     async function disconnectWifiNow() {
       try {
-        showWifiAlert('กำลังตัดการเชื่อมต่อ...', 'info');
+        showWifiAlert('Disconnecting Wi-Fi...', 'info');
         const res = await fetch('/api/wifi/disconnect', { method: 'POST' });
         const data = await res.json();
         updateDevConnButtonUI(false, '');
         updateModalWifiStatus(false, '');
-        showWifiAlert('ตัดการเชื่อมต่อเรียบร้อยแล้ว', 'success');
+        showWifiAlert('Wi-Fi disconnected successfully', 'success');
         scanWifiNetworks(false);
       } catch (err) {
         alert('Disconnect error: ' + err.message);

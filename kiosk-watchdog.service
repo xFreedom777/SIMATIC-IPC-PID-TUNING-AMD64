@@ -1,5 +1,5 @@
 [Unit]
-Description=Siemens IOT2050 Kiosk Self-Healing Watchdog
+Description=MITRPHOL AMD64 Kiosk Self-Healing Watchdog
 After=pid-app.service
 
 [Service]
@@ -8,6 +8,8 @@ User=root
 ExecStart=/bin/bash /opt/pid-tuning-app/kiosk-watchdog.sh
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

@@ -1,1 +1,194 @@
-<!DOCTYPE html><html><head><meta http-equiv=refresh content=10;url=/ /><style>body { background: #0a0a0a; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; overflow:hidden; font-family: sans-serif; } .container-wrapper { position: relative; display: flex; justify-content: center; align-items: center; } .glow-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 30px; box-shadow: 0 0 120px rgba(255, 204, 0, 0.8), inset 0 0 50px rgba(255, 204, 0, 0.3); animation: pulse 2s infinite alternate ease-in-out; } .container { position: relative; display:flex; align-items:center; background: #1a1a1a; padding: 60px 120px; border-radius: 30px; border: 1px solid rgba(255, 204, 0, 0.2); box-shadow: 0 0 30px rgba(255, 204, 0, 0.2), inset 0 0 10px rgba(255, 204, 0, 0.05); } @keyframes pulse { 0% { opacity: 0.1; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1.02); } } .siemens { color: #009999; font-size: 90px; font-weight: bold; letter-spacing: 10px; text-shadow: 0 0 20px rgba(0, 153, 153, 0.6); } .line { width: 6px; height: 140px; background: #00ffff; box-shadow: 0 0 25px #00ffff; margin: 0 80px; border-radius: 3px; } .xdev { color: #FFCC00; font-size: 110px; font-weight: 900; font-style: italic; letter-spacing: 2px; text-shadow: 0 0 40px rgba(255, 204, 0, 0.8); } .v12 { color: #fff; font-size: 30px; position:absolute; bottom: -40px; right: 0; font-style: normal; opacity: 0.5; }</style></head><body><div class=container-wrapper><div class=glow-layer></div><div class=container><div class=siemens>SIEMENS</div><div class=line></div><div class=xdev style=position:relative>xDev<div class=v12 style="white-space: nowrap; right: -20px;">V1.2 &nbsp;&nbsp; BY DREAM PIYAPONG</div></div></div></div></body></html>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MITRPHOL PID System — Initializing...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .container-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 48px;
+    }
+
+    .glow-layer {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      border-radius: 30px;
+      box-shadow: 0 0 120px rgba(255, 204, 0, 0.8), inset 0 0 50px rgba(255, 204, 0, 0.3);
+      animation: pulse 2s infinite alternate ease-in-out;
+    }
+
+    .container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      background: #1a1a1a;
+      padding: 60px 120px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 204, 0, 0.2);
+      box-shadow: 0 0 30px rgba(255, 204, 0, 0.2), inset 0 0 10px rgba(255, 204, 0, 0.05);
+    }
+
+    @keyframes pulse {
+      0%   { opacity: 0.1; transform: scale(0.98); }
+      100% { opacity: 1;   transform: scale(1.02); }
+    }
+
+    .siemens {
+      color: #009999;
+      font-size: 90px;
+      font-weight: bold;
+      letter-spacing: 10px;
+      text-shadow: 0 0 20px rgba(0, 153, 153, 0.6);
+    }
+
+    .line {
+      width: 6px;
+      height: 140px;
+      background: #00ffff;
+      box-shadow: 0 0 25px #00ffff;
+      margin: 0 80px;
+      border-radius: 3px;
+    }
+
+    .xdev {
+      color: #FFCC00;
+      font-size: 110px;
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 2px;
+      text-shadow: 0 0 40px rgba(255, 204, 0, 0.8);
+    }
+
+    .v12 {
+      color: #fff;
+      font-size: 30px;
+      position: absolute;
+      bottom: -40px;
+      right: 0;
+      font-style: normal;
+      opacity: 0.5;
+      white-space: nowrap;
+    }
+
+    /* ── Status bar below the logo ── */
+    #status-bar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #status-dot-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #status-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #64748b;
+      box-shadow: 0 0 8px #64748b;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+
+    #status-dot.waiting  { background: #f59e0b; box-shadow: 0 0 12px #f59e0b; animation: blink 1s infinite alternate; }
+    #status-dot.ok       { background: #22c55e; box-shadow: 0 0 14px #22c55e; }
+    #status-dot.error    { background: #ef4444; box-shadow: 0 0 12px #ef4444; }
+
+    @keyframes blink { 0% { opacity: 0.3; } 100% { opacity: 1; } }
+
+    #status-text {
+      color: #94a3b8;
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+
+    #retry-count {
+      color: #475569;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-wrapper">
+    <div class="glow-layer"></div>
+    <div class="container">
+      <div class="siemens">SIEMENS</div>
+      <div class="line"></div>
+      <div class="xdev" style="position:relative">
+        xDev
+        <div class="v12">V7.0 &nbsp;&nbsp; BY DREAM PIYAPONG</div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar">
+      <div id="status-dot-row">
+        <div id="status-dot" class="waiting"></div>
+        <span id="status-text">Initializing PID System...</span>
+      </div>
+      <div id="retry-count">Health check attempt #1</div>
+    </div>
+  </div>
+
+  <script>
+    // ── Smart Backend Health-Check (English Standard) ──
+    const dot      = document.getElementById('status-dot');
+    const textEl   = document.getElementById('status-text');
+    const retryEl  = document.getElementById('retry-count');
+
+    let attempt = 0;
+    const MAX_WAIT_MS = 60000;   // 60s max timeout
+    const POLL_MS     = 1500;    // Check every 1.5s
+    const startTime   = Date.now();
+
+    async function checkBackend() {
+      attempt++;
+      retryEl.textContent = `Connecting backend... (Attempt #${attempt})`;
+
+      if (Date.now() - startTime > MAX_WAIT_MS) {
+        dot.className = 'error';
+        textEl.textContent = 'Timeout. Loading Dashboard...';
+        setTimeout(() => { window.location.replace('/'); }, 1000);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        if (res.ok) {
+          dot.className = 'ok';
+          textEl.textContent = 'System Ready. Launching Dashboard...';
+          retryEl.textContent = '';
+          setTimeout(() => { window.location.replace('/'); }, 400);
+          return;
+        }
+      } catch (_) {}
+
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+      dot.className = 'waiting';
+      textEl.textContent = `Booting PID Server... (${elapsedSec}s)`;
+      setTimeout(checkBackend, POLL_MS);
+    }
+
+    setTimeout(checkBackend, 800);
+  </script>
+</body>
+</html>

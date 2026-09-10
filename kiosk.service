@@ -1,13 +1,22 @@
 [Unit]
-Description=Siemens IOT2050 X11 Kiosk Display Service
+Description=MITRPHOL AMD64 X11 Kiosk Display Service
 After=systemd-user-sessions.service pid-app.service
+# รอให้ GPU driver (i915/amdgpu) โหลดเสร็จก่อน X11 เริ่ม ป้องกันจอดำขณะบูต
+# พร้อมกัน ถ้าเกิด restart loop ผิดปกติ StartLimitBurst จะ cap ไว้ไม่ให้บานที่
+# จากนั้น watchdog จะ restart ให้เองอย่างมีความปลอดภัย
+# หมายเหตุ: `StartLimitBurst=5` = สูงสุด 5 ครั้งใน 2 นาที ถ้าเกินจะหยุดไว้ให้ watchdog จัดการ
+# (watchdog ใช้ systemctl restart เอง ทำให้ counter reset ทุกครั้ง)
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 User=root
 WorkingDirectory=/root
 ExecStart=/usr/bin/xinit /root/.xinitrc -- /usr/bin/X -nolisten tcp
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=5
+RestartKillSignal=SIGTERM
+TimeoutStopSec=10
 
 [Install]
 WantedBy=graphical.target

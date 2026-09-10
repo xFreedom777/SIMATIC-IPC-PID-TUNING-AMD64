@@ -1214,7 +1214,7 @@ app.post('/api/wifi/disconnect', (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n  ╔══════════════════════════════════════╗`);
-  console.log(`  ║   PID Tuning App  •  IOT2050 Ready   ║`);
+  console.log(`  ║   PID Tuning App  •  AMD64 IPC Ready   ║`);
   console.log(`  ╠══════════════════════════════════════╣`);
   console.log(`  ║  http://localhost:${PORT}               ║`);
   console.log(`  ╚══════════════════════════════════════╝\n`);

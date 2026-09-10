@@ -2348,23 +2348,32 @@ setTimeout(checkUsbStatus, 1000);
   document.head.appendChild(style);
 })();
 
-// ── Feature 1: Auto enable Low Perf Mode on boot (RED ring) ──
-(function autoPerfLow() {
+// ── Feature 1: Smart Performance Mode Auto-Detection (AMD64 vs ARM) ──
+(function autoPerfDetect() {
   setTimeout(() => {
-    if (!State.lowPerfMode) {
-      const btn = document.getElementById('perfToggleBtn');
-      if (!btn) return;
-      // Enable Low Perf
-      State.lowPerfMode = true;
-      document.body.classList.add('low-perf');
-      btn.innerHTML = '🐢 Perf: Low';
-      btn.classList.replace('btn-ghost', 'btn-amber');
-      // Add red ring
-      btn.style.position = 'relative';
-      btn.classList.add('ring-red');
-      // Remove ring after 5 seconds
-      setTimeout(() => btn.classList.remove('ring-red'), 5000);
-      toast('🐢 Low Performance Mode — Auto enabled for Kiosk', 'info', 3000);
+    const btn = document.getElementById('perfToggleBtn');
+    if (!btn) return;
+    // AMD64 (OptiPlex/Lenovo 8GB+ RAM) => High Perf (60fps, animations on)
+    // ARM / Low-RAM device (IOT2050 <=2GB) => Low Perf (throttled)
+    var ramGB = navigator.deviceMemory || 4;
+    if (ramGB >= 4) {
+      State.lowPerfMode = false;
+      document.body.classList.remove('low-perf');
+      btn.innerHTML = '🚀 Perf: High';
+      btn.classList.replace('btn-amber', 'btn-ghost');
+      console.log('[AutoPerf] AMD64 (' + ramGB + 'GB RAM) -> High Perf Mode');
+    } else {
+      if (!State.lowPerfMode) {
+        State.lowPerfMode = true;
+        document.body.classList.add('low-perf');
+        btn.innerHTML = '🐢 Perf: Low';
+        btn.classList.replace('btn-ghost', 'btn-amber');
+        btn.style.position = 'relative';
+        btn.classList.add('ring-red');
+        setTimeout(function(){ btn.classList.remove('ring-red'); }, 5000);
+        toast('Low Perf Mode — Auto (Low RAM device)', 'info', 3000);
+        console.log('[AutoPerf] Low-RAM (' + ramGB + 'GB) -> Low Perf Mode');
+      }
     }
   }, 1500);
 })();
