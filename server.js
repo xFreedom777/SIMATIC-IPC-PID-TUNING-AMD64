@@ -1089,6 +1089,129 @@ function autoClearLogs() {
 setTimeout(autoClearLogs, 5000);
 setInterval(autoClearLogs, 24 * 60 * 60 * 1000);
 
+
+// ═══════════════════════════════════════════════
+// ── Dev.Connection Wi-Fi Management APIs ──
+// ═══════════════════════════════════════════════
+app.get('/api/wifi/status', (req, res) => {
+  const exec = require('child_process').exec;
+  exec("nmcli -t -f NAME,TYPE,DEVICE con show --active", (err, stdout) => {
+    let activeWifi = null;
+    if (stdout) {
+      const lines = stdout.trim().split('\n');
+      for (const line of lines) {
+        const parts = line.split(':');
+        if (parts[1] && (parts[1].includes('wireless') || parts[1].includes('wifi') || parts[1].includes('802-11-wireless'))) {
+          activeWifi = {
+            ssid: parts[0],
+            type: parts[1],
+            device: parts[2] || 'wifi'
+          };
+          break;
+        }
+      }
+    }
+    
+    if (activeWifi) {
+      exec("nmcli -t -f IN-USE,SSID,SIGNAL dev wifi list", (err2, stdout2) => {
+        let signal = 80;
+        if (stdout2) {
+          const wLines = stdout2.trim().split('\n');
+          for (const wl of wLines) {
+            const wp = wl.split(':');
+            if (wp[0] === '*' || wp[1] === activeWifi.ssid) {
+              signal = parseInt(wp[2], 10) || 80;
+              break;
+            }
+          }
+        }
+        res.json({ connected: true, ssid: activeWifi.ssid, signal, device: activeWifi.device });
+      });
+    } else {
+      res.json({ connected: false, ssid: null, signal: 0 });
+    }
+  });
+});
+
+app.get('/api/wifi/scan', (req, res) => {
+  const exec = require('child_process').exec;
+  exec("nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes", { timeout: 15000 }, (err, stdout, stderr) => {
+    const networks = [];
+    const seen = new Set();
+    if (stdout) {
+      const lines = stdout.trim().split('\n');
+      for (const line of lines) {
+        if (!line) continue;
+        const parts = line.split(':');
+        if (parts.length >= 4) {
+          const inUse = parts[0] === '*';
+          const ssid = parts[1];
+          const signal = parseInt(parts[2], 10) || 0;
+          const security = parts[3] || 'OPEN';
+          
+          if (ssid && ssid.trim() !== '' && !seen.has(ssid)) {
+            seen.add(ssid);
+            networks.push({
+              ssid: ssid.trim(),
+              signal: isNaN(signal) ? 0 : signal,
+              security: security.trim(),
+              connected: inUse
+            });
+          }
+        }
+      }
+    }
+    networks.sort((a, b) => b.signal - a.signal);
+    res.json({ networks });
+  });
+});
+
+app.post('/api/wifi/connect', (req, res) => {
+  const exec = require('child_process').exec;
+  const { ssid, password } = req.body || {};
+  if (!ssid) {
+    return res.status(400).json({ error: 'SSID is required' });
+  }
+
+  const safeSsid = ssid.replace(/(["\\$`])/g, '\\$1');
+  let cmd = `nmcli dev wifi connect "${safeSsid}"`;
+  if (password && password.trim() !== '') {
+    const safePass = password.replace(/(["\\$`])/g, '\\$1');
+    cmd += ` password "${safePass}"`;
+  }
+
+  exec(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
+    const output = (stdout || '') + (stderr || '');
+    if (err || output.toLowerCase().includes('error:')) {
+      const errMsg = stderr ? stderr.trim() : (output.trim() || 'Failed to connect');
+      return res.status(400).json({ success: false, error: errMsg });
+    }
+    res.json({ success: true, message: `Connected to ${ssid} successfully!` });
+  });
+});
+
+app.post('/api/wifi/disconnect', (req, res) => {
+  const exec = require('child_process').exec;
+  exec("nmcli -t -f DEVICE,TYPE dev", (err, stdout) => {
+    let wifiDev = '';
+    if (stdout) {
+      const lines = stdout.trim().split('\n');
+      for (const line of lines) {
+        const parts = line.split(':');
+        if (parts[1] === 'wifi') {
+          wifiDev = parts[0];
+          break;
+        }
+      }
+    }
+
+    const cmd = wifiDev ? `nmcli dev disconnect ${wifiDev}` : `nmcli dev disconnect wlan0`;
+    exec(cmd, (err2, stdout2, stderr2) => {
+      res.json({ success: true, message: 'Wi-Fi Disconnected successfully' });
+    });
+  });
+});
+
 server.listen(PORT, () => {
   console.log(`\n  ╔══════════════════════════════════════╗`);
   console.log(`  ║   PID Tuning App  •  IOT2050 Ready   ║`);

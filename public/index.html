@@ -123,10 +123,15 @@
     </div>
 
     <div class="header-right">
+            <button class="btn btn-ghost btn-sm" id="devConnBtn" onclick="handleDevConnectionClick()" title="Dev.Connection (Wi-Fi Manager)" style="margin-right:12px; font-weight:bold; border: 1px solid rgba(148, 163, 184, 0.3); transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 6px;">
+        <span id="devConnDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#94a3b8; transition: all 0.3s ease;"></span>
+        <span id="devConnText">📡 Dev.Connection</span>
+      </button>
       <button class="btn btn-ghost btn-sm" id="perfToggleBtn" onclick="toggleLowPerfMode()" title="Toggle Low Performance Mode for Edge Devices" style="margin-right:15px; font-weight:bold;">🚀 Perf: High</button>
       <button class="btn btn-ghost btn-sm" onclick="openOffsetModal()" id="offsetBtn" disabled title="Configure DB Offsets">⚙️ DB Offsets</button>
       <button class="btn btn-ghost btn-sm" onclick="clearHistory()">🧹 Clear History</button>
-      <button class="btn btn-amber btn-sm" onclick="toggleParamLock()" id="lockBtn" title="Parameter Lock">🔒 Locked</button>
+      <button class="btn btn-amber btn-sm" onclick="toggleParamLock()" id="lockBtn" title="Parameter Lock / Unlock">🔒 Locked</button>
+      <button class="btn btn-ghost btn-sm" onclick="openChangePinModal()" title="Change PIN Password" style="margin-left:5px">🔑 Change PIN</button>
       <button class="btn btn-warning btn-sm" onclick="restartSystem()" style="margin-left: 10px;" title="Restart System">🔄 Restart</button>
       <button class="btn btn-danger btn-sm" onclick="shutdownSystem()" style="margin-left: 10px;" title="Power Off System">🛑 Power Off</button>
     </div>
@@ -702,24 +707,44 @@
   </div>
 </div>
 
-<!-- ── PIN Unlock Modal ── -->
+<!-- ── PIN Unlock Modal (Touch Numpad Enabled) ── -->
 <div class="modal-overlay" id="pinModal" style="display:none" onclick="closeModal('pinModal')">
-  <div class="modal" style="width:340px" onclick="event.stopPropagation()">
+  <div class="modal" style="width:340px;text-align:center;" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <span class="modal-title">🔓 Enter PIN to Unlock</span>
+      <span class="modal-title">🔒 Enter PIN to Unlock</span>
       <button class="modal-close" onclick="closeModal('pinModal')">✕</button>
     </div>
-    <p class="text-sm text-muted" style="margin-bottom:16px">Enter the 4-digit PIN to allow parameter editing.</p>
+    <p class="text-xs text-muted" style="margin-bottom:12px">Enter 4-digit PIN to edit Setpoint & Parameters</p>
     <div class="form-group">
-      <label>PIN</label>
       <input class="input" id="pinInput" type="password" maxlength="8" placeholder="••••"
-             style="font-size:22px;letter-spacing:8px;text-align:center"
-             onkeydown="if(event.key==='Enter') confirmPin()">
-      <span id="pinError" class="text-xs" style="color:var(--red);display:none;margin-top:4px">❌ Incorrect PIN</span>
+             style="font-size:24px;letter-spacing:10px;text-align:center;font-weight:bold;"
+             readonly onkeydown="if(event.key==='Enter') confirmPin()">
+      <span id="pinError" class="text-xs" style="color:var(--red);display:none;margin-top:4px;font-weight:bold;">❌ Incorrect PIN (Default is 1234)</span>
     </div>
-    <div class="modal-footer">
+
+    <!-- On-Screen Touch Numpad -->
+    <div class="numpad-grid" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin:12px 0;">
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('1')">1</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('2')">2</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('3')">3</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('4')">4</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('5')">5</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('6')">6</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('7')">7</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('8')">8</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('9')">9</button>
+      <button type="button" class="btn btn-danger btn-sm" style="font-size:14px;padding:12px 0;" onclick="numpadClear()">Clear</button>
+      <button type="button" class="btn btn-ghost" style="font-size:18px;font-weight:bold;padding:12px 0;" onclick="numpadPress('0')">0</button>
+      <button type="button" class="btn btn-warning btn-sm" style="font-size:16px;padding:12px 0;" onclick="numpadBackspace()">⌫</button>
+    </div>
+
+    <div style="margin:10px 0;text-align:right;">
+      <a href="javascript:void(0)" onclick="closeModal('pinModal'); openChangePinModal();" style="color:var(--primary);font-size:13px;text-decoration:none;">🔑 Want to Change PIN?</a>
+    </div>
+
+    <div class="modal-footer" style="display:flex;justify-content:space-between;margin-top:8px;">
       <button class="btn btn-ghost" onclick="closeModal('pinModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmPin()">🔓 Unlock</button>
+      <button class="btn btn-primary" style="flex:1;margin-left:10px;" onclick="confirmPin()">🔓 Unlock</button>
     </div>
   </div>
 </div>
@@ -731,20 +756,21 @@
       <span class="modal-title">🔑 Change PIN</span>
       <button class="modal-close" onclick="closeModal('changePinModal')">✕</button>
     </div>
+    <p class="text-xs text-muted" style="margin-bottom:12px">You can update your PIN anytime (Default PIN is 1234)</p>
     <div class="form-group">
       <label>Current PIN</label>
-      <input class="input" id="cpOldPin" type="password" maxlength="8" placeholder="Current PIN">
+      <input class="input" id="cpOldPin" type="password" maxlength="8" placeholder="Enter current PIN" style="font-size:16px;">
     </div>
     <div class="form-group">
-      <label>New PIN</label>
-      <input class="input" id="cpNewPin" type="password" maxlength="8" placeholder="New PIN (4–8 digits)">
+      <label>New PIN (4–8 digits)</label>
+      <input class="input" id="cpNewPin" type="password" maxlength="8" placeholder="Enter new PIN" style="font-size:16px;">
     </div>
     <div class="form-group">
       <label>Confirm New PIN</label>
-      <input class="input" id="cpConfirmPin" type="password" maxlength="8" placeholder="Confirm New PIN">
+      <input class="input" id="cpConfirmPin" type="password" maxlength="8" placeholder="Re-enter new PIN" style="font-size:16px;">
     </div>
-    <span id="cpError" class="text-xs" style="color:var(--red);display:none">❌ Error</span>
-    <div class="modal-footer">
+    <span id="cpError" class="text-xs" style="color:var(--red);display:none;font-weight:bold;margin-top:4px;">❌ Error</span>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;margin-top:16px;">
       <button class="btn btn-ghost" onclick="closeModal('changePinModal')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmChangePin()">💾 Save PIN</button>
     </div>
@@ -790,6 +816,351 @@
       </div>
     </div>
   </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- 📡 Dev.Connection Wi-Fi Modal & Management Logic               -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="wifiModal" style="display:none" onclick="closeModal('wifiModal')">
+    <div class="modal" onclick="event.stopPropagation()" style="width: 480px; max-width: 95vw; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.7);">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+        <span class="modal-title" style="font-size: 16px; font-weight: 700; color: #38bdf8; display:flex; align-items:center; gap:8px;">
+          <span>📡</span> Dev.Connection — Wi-Fi Manager
+        </span>
+        <button class="modal-close" onclick="closeModal('wifiModal')" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+
+      <!-- Current Status Banner -->
+      <div id="wifiStatusCard" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 14px; margin: 14px 0 10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Status</div>
+          <div id="wifiModalStatusText" style="font-weight: bold; font-size: 14px; color: #f1f5f9; margin-top: 2px; display: flex; align-items: center; gap: 6px;">
+            <span id="wifiModalStatusDot" style="width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span>
+            <span id="wifiModalStatusName">Checking...</span>
+          </div>
+        </div>
+        <button id="wifiModalDisconnectBtn" class="btn btn-danger btn-sm" onclick="disconnectWifiNow()" style="display:none; padding: 5px 12px; font-size: 12px; font-weight: 600;">
+          Disconnect
+        </button>
+      </div>
+
+      <!-- Available Networks Section -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 14px 0 8px;">
+        <span style="font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Available Networks</span>
+        <button class="btn btn-ghost btn-xs" id="wifiScanRefreshBtn" onclick="scanWifiNetworks(true)" style="color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          <span>🔄</span> Rescan
+        </button>
+      </div>
+
+      <!-- Wi-Fi List Container -->
+      <div id="wifiListContainer" style="max-height: 220px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; background: rgba(11, 17, 32, 0.85); padding: 4px;">
+        <div id="wifiListLoading" style="padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
+          🔍 Scanning for Wi-Fi networks...
+        </div>
+      </div>
+
+      <!-- Password Input Section -->
+      <div id="wifiAuthSection" style="display: none; margin-top: 14px; background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 8px; padding: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #e2e8f0; display:flex; justify-content:space-between;">
+          <span>Connect to: <strong id="wifiSelectedSsidLabel" style="color: #38bdf8;"></strong></span>
+          <span id="wifiSelectedSecurityLabel" style="font-size:11px; color:#94a3b8;"></span>
+        </div>
+        <div style="position: relative; margin-top: 6px;">
+          <input class="input" id="wifiPassInput" type="password" placeholder="Enter Wi-Fi password (leave blank if none)..." style="width: 100%; padding: 8px 38px 8px 12px; font-size: 13px; background: #0b1120; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #fff;">
+          <button type="button" onclick="toggleWifiPassEye()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 14px; color: #94a3b8;">👁️</button>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+          <button class="btn btn-ghost btn-sm" onclick="cancelWifiConnectForm()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="wifiConnectSubmitBtn" onclick="submitWifiConnectAction()" style="font-weight: 600;">
+            ⚡ Connect
+          </button>
+        </div>
+      </div>
+
+      <!-- Feedback Alert -->
+      <div id="wifiFeedbackAlert" style="display: none; margin-top: 12px; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 500;"></div>
+
+      <div class="modal-footer" style="margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; display: flex; justify-content: flex-end;">
+        <button class="btn btn-ghost" onclick="closeModal('wifiModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Dev.Connection Style */
+    .wifi-item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 2px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      user-select: none;
+    }
+    .wifi-item-row:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .wifi-item-row.is-connected {
+      background: rgba(34, 197, 94, 0.15);
+      border-left: 3px solid #22c55e;
+    }
+    .wifi-signal-bar {
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════
+    // 📡 Dev.Connection Wi-Fi Client Logic
+    // ═══════════════════════════════════════════════════════════════
+    let devWifiState = {
+      connected: false,
+      ssid: '',
+      signal: 0,
+      selectedSsid: '',
+      polling: null
+    };
+
+    function updateDevConnButtonUI(connected, ssid) {
+      const btn = document.getElementById('devConnBtn');
+      const dot = document.getElementById('devConnDot');
+      const txt = document.getElementById('devConnText');
+      if (!btn || !dot || !txt) return;
+
+      devWifiState.connected = connected;
+      devWifiState.ssid = ssid || '';
+
+      if (connected && ssid) {
+        // Connected: GREEN
+        btn.style.background = 'rgba(34, 197, 94, 0.16)';
+        btn.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+        btn.style.color = '#4ade80';
+        btn.style.boxShadow = '0 0 12px rgba(34, 197, 94, 0.2)';
+        dot.style.background = '#22c55e';
+        dot.style.boxShadow = '0 0 8px #22c55e';
+        txt.textContent = '📡 ' + ssid;
+        btn.title = 'Dev.Connection: Connected to ' + ssid + ' (Click to Disconnect)';
+      } else {
+        // Disconnected: GRAY
+        btn.style.background = 'rgba(148, 163, 184, 0.08)';
+        btn.style.borderColor = 'rgba(148, 163, 184, 0.25)';
+        btn.style.color = '#94a3b8';
+        btn.style.boxShadow = 'none';
+        dot.style.background = '#64748b';
+        dot.style.boxShadow = 'none';
+        txt.textContent = '📡 Dev.Connection';
+        btn.title = 'Dev.Connection: Disconnected (Click to Search & Connect Wi-Fi)';
+      }
+    }
+
+    async function checkDevWifiStatus() {
+      try {
+        const res = await fetch('/api/wifi/status');
+        const data = await res.json();
+        updateDevConnButtonUI(data.connected, data.ssid);
+        updateModalWifiStatus(data.connected, data.ssid);
+      } catch (err) {
+        console.warn('Wi-Fi status check error:', err);
+      }
+    }
+
+    function updateModalWifiStatus(connected, ssid) {
+      const dot = document.getElementById('wifiModalStatusDot');
+      const name = document.getElementById('wifiModalStatusName');
+      const discBtn = document.getElementById('wifiModalDisconnectBtn');
+      if (!dot || !name || !discBtn) return;
+
+      if (connected && ssid) {
+        dot.style.background = '#22c55e';
+        dot.style.boxShadow = '0 0 8px #22c55e';
+        name.innerHTML = `<span style="color:#4ade80;">Connected to <strong>${ssid}</strong></span>`;
+        discBtn.style.display = 'block';
+      } else {
+        dot.style.background = '#64748b';
+        dot.style.boxShadow = 'none';
+        name.innerHTML = `<span style="color:#94a3b8;">Disconnected</span>`;
+        discBtn.style.display = 'none';
+      }
+    }
+
+    async function handleDevConnectionClick() {
+      if (devWifiState.connected) {
+        // User wants to disconnect (turns gray)
+        const confirmed = confirm(`คุณต้องการตัดการเชื่อมต่อจาก Wi-Fi "${devWifiState.ssid}" หรือไม่?`);
+        if (confirmed) {
+          await disconnectWifiNow();
+        }
+      } else {
+        // Open Wi-Fi Search & Connection Modal
+        if (typeof openModal === 'function') {
+          openModal('wifiModal');
+        } else {
+          document.getElementById('wifiModal').style.display = 'flex';
+        }
+        checkDevWifiStatus();
+        scanWifiNetworks(true);
+      }
+    }
+
+    async function scanWifiNetworks(isManual = false) {
+      const listEl = document.getElementById('wifiListContainer');
+      const refreshBtn = document.getElementById('wifiScanRefreshBtn');
+      if (!listEl) return;
+
+      listEl.innerHTML = '<div style="padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;">🔍 Scanning for Wi-Fi networks...</div>';
+      if (refreshBtn) refreshBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/wifi/scan');
+        const data = await res.json();
+        
+        if (!data.networks || data.networks.length === 0) {
+          listEl.innerHTML = '<div style="padding: 24px; text-align: center; color: #94a3b8;">No Wi-Fi networks found</div>';
+          return;
+        }
+
+        listEl.innerHTML = '';
+        data.networks.forEach(net => {
+          const isCurrent = net.connected || (devWifiState.connected && net.ssid === devWifiState.ssid);
+          const row = document.createElement('div');
+          row.className = 'wifi-item-row' + (isCurrent ? ' is-connected' : '');
+          row.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 15px;">${net.security === 'OPEN' ? '🔓' : '🔒'}</span>
+              <div>
+                <div style="font-weight: 600; font-size: 13px; color: ${isCurrent ? '#4ade80' : '#f8fafc'};">${net.ssid}</div>
+                <div style="font-size: 11px; color: #64748b;">${net.security}</div>
+              </div>
+            </div>
+            <div class="wifi-signal-bar">
+              ${isCurrent ? '<span style="color:#22c55e; font-size:11px; font-weight:bold; background:rgba(34,197,94,0.15); padding:2px 6px; border-radius:4px;">ACTIVE</span>' : ''}
+              <span>📶 ${net.signal}%</span>
+            </div>
+          `;
+          row.onclick = () => selectWifiForConnect(net);
+          listEl.appendChild(row);
+        });
+      } catch (err) {
+        listEl.innerHTML = `<div style="padding: 20px; color: #f87171; text-align:center;">Scan error: ${err.message}</div>`;
+      } finally {
+        if (refreshBtn) refreshBtn.disabled = false;
+      }
+    }
+
+    function selectWifiForConnect(net) {
+      devWifiState.selectedSsid = net.ssid;
+      document.getElementById('wifiSelectedSsidLabel').textContent = net.ssid;
+      document.getElementById('wifiSelectedSecurityLabel').textContent = net.security;
+      document.getElementById('wifiPassInput').value = '';
+      document.getElementById('wifiAuthSection').style.display = 'block';
+      document.getElementById('wifiPassInput').focus();
+      hideWifiAlert();
+    }
+
+    function cancelWifiConnectForm() {
+      document.getElementById('wifiAuthSection').style.display = 'none';
+      devWifiState.selectedSsid = '';
+      hideWifiAlert();
+    }
+
+    function toggleWifiPassEye() {
+      const input = document.getElementById('wifiPassInput');
+      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function submitWifiConnectAction() {
+      const ssid = devWifiState.selectedSsid;
+      const password = document.getElementById('wifiPassInput').value;
+      const btn = document.getElementById('wifiConnectSubmitBtn');
+      
+      if (!ssid) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      showWifiAlert('กำลังเชื่อมต่อ Wi-Fi "' + ssid + '" กรุณารอสักครู่...', 'info');
+
+      try {
+        const res = await fetch('/api/wifi/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, password })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showWifiAlert('✅ เชื่อมต่อ ' + ssid + ' สำเร็จ!', 'success');
+          updateDevConnButtonUI(true, ssid);
+          updateModalWifiStatus(true, ssid);
+          cancelWifiConnectForm();
+          setTimeout(() => {
+            if (typeof closeModal === 'function') {
+              closeModal('wifiModal');
+            } else {
+              document.getElementById('wifiModal').style.display = 'none';
+            }
+          }, 1500);
+        } else {
+          showWifiAlert('❌ เชื่อมต่อไม่สำเร็จ: ' + (data.error || 'เกิดข้อผิดพลาด'), 'error');
+        }
+      } catch (err) {
+        showWifiAlert('❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '⚡ Connect';
+      }
+    }
+
+    async function disconnectWifiNow() {
+      try {
+        showWifiAlert('กำลังตัดการเชื่อมต่อ...', 'info');
+        const res = await fetch('/api/wifi/disconnect', { method: 'POST' });
+        const data = await res.json();
+        updateDevConnButtonUI(false, '');
+        updateModalWifiStatus(false, '');
+        showWifiAlert('ตัดการเชื่อมต่อเรียบร้อยแล้ว', 'success');
+        scanWifiNetworks(false);
+      } catch (err) {
+        alert('Disconnect error: ' + err.message);
+      }
+    }
+
+    function showWifiAlert(msg, type) {
+      const el = document.getElementById('wifiFeedbackAlert');
+      if (!el) return;
+      el.style.display = 'block';
+      el.textContent = msg;
+      if (type === 'success') {
+        el.style.background = 'rgba(34, 197, 94, 0.15)';
+        el.style.color = '#4ade80';
+        el.style.border = '1px solid rgba(34, 197, 94, 0.4)';
+      } else if (type === 'error') {
+        el.style.background = 'rgba(239, 68, 68, 0.15)';
+        el.style.color = '#f87171';
+        el.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      } else {
+        el.style.background = 'rgba(56, 189, 248, 0.15)';
+        el.style.color = '#38bdf8';
+        el.style.border = '1px solid rgba(56, 189, 248, 0.4)';
+      }
+    }
+
+    function hideWifiAlert() {
+      const el = document.getElementById('wifiFeedbackAlert');
+      if (el) el.style.display = 'none';
+    }
+
+    // Initialize Wi-Fi status on load
+    window.addEventListener('load', () => {
+      checkDevWifiStatus();
+      setInterval(checkDevWifiStatus, 6000);
+    });
+  </script>
 
 </body>
 </html>

@@ -1,3 +1,27 @@
+
+// ── Touch On-Screen Numpad Helpers ──
+function numpadPress(digit) {
+  const inp = document.getElementById('pinInput');
+  if (inp && inp.value.length < 8) {
+    inp.value += digit;
+    document.getElementById('pinError').style.display = 'none';
+  }
+}
+function numpadBackspace() {
+  const inp = document.getElementById('pinInput');
+  if (inp && inp.value.length > 0) {
+    inp.value = inp.value.slice(0, -1);
+    document.getElementById('pinError').style.display = 'none';
+  }
+}
+function numpadClear() {
+  const inp = document.getElementById('pinInput');
+  if (inp) {
+    inp.value = '';
+    document.getElementById('pinError').style.display = 'none';
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    PID Tuning Studio — app.js  (v2 — with PIN lock + chart fix)
    ═══════════════════════════════════════════════════════════ */
@@ -724,6 +748,11 @@ async function setPIDMode(mode) {
 }
 
 async function writeSetpoint() {
+  if (State.paramLocked) {
+    toast('🔒 Please enter PIN to unlock Setpoint', 'warning');
+    toggleParamLock();
+    return;
+  }
   if (!State.selectedBlockId) return toast('Select a PID loop first', 'warning');
   const sp = document.getElementById('spInput').value;
   if (sp === '') return toast('Enter setpoint value', 'warning');
@@ -1425,27 +1454,102 @@ function confirmPin() {
   }
 }
 
+let autoLockTimer = null;
+
+function resetAutoLockTimer() {
+  if (autoLockTimer) clearTimeout(autoLockTimer);
+  if (!State.paramLocked) {
+    // Auto-relock after 5 minutes of inactivity
+    autoLockTimer = setTimeout(() => {
+      State.paramLocked = true;
+      applyLockState();
+      toast('🔒 System auto-locked due to inactivity', 'warning');
+    }, 5 * 60 * 1000);
+  }
+}
+
+// Attach user activity listeners to reset auto-lock timer
+['click', 'touchstart', 'mousemove', 'keydown'].forEach(evt => {
+  window.addEventListener(evt, resetAutoLockTimer, { passive: true });
+});
+
 function applyLockState() {
-  const locked   = State.paramLocked;
-  const lockBtn  = document.getElementById('lockBtn');
-  const lockBnr  = document.getElementById('lockBanner');
-  const writeBtn = document.getElementById('writeParamBtn');
-  const statusLb = document.getElementById('lockStatusLabel');
+  const locked       = State.paramLocked;
+  const lockBtn      = document.getElementById('lockBtn');
+  const lockBnr      = document.getElementById('lockBanner');
+  const writeBtn     = document.getElementById('writeParamBtn');
+  const statusLb     = document.getElementById('lockStatusLabel');
+  const spInput      = document.getElementById('spInput');
+  const spBtn        = document.getElementById('spBtn');
+  const spBadge      = document.getElementById('spLockBadge');
+  const manualInput  = document.getElementById('manualInput');
+  const manualSlider = document.getElementById('manualSlider');
+  const offsetBtn    = document.getElementById('offsetBtn');
+
+  // Manual Output is NEVER locked (always accessible for operator safety)
+  if (manualInput) {
+    manualInput.disabled = false;
+    manualInput.style.cursor = 'text';
+    manualInput.style.opacity = '1';
+  }
+  if (manualSlider) {
+    manualSlider.disabled = false;
+  }
 
   if (locked) {
-    lockBtn.innerHTML  = '🔒 Locked';
-    lockBtn.className  = 'btn btn-amber btn-sm';
+    if (lockBtn) {
+      lockBtn.innerHTML  = '🔒 Locked';
+      lockBtn.className  = 'btn btn-amber btn-sm';
+    }
     if (lockBnr)  lockBnr.style.display = 'block';
     if (writeBtn) { writeBtn.disabled = true;  writeBtn.title = 'Unlock parameters first'; }
     if (statusLb) statusLb.textContent = '🔒 Locked — unlock to edit';
+    if (spBadge) {
+      spBadge.textContent = '🔒 Protected';
+      spBadge.style.color = 'var(--amber)';
+    }
+    if (spInput) {
+      spInput.readOnly = true;
+      spInput.style.cursor = 'pointer';
+      spInput.style.opacity = '0.6';
+      spInput.title = '🔒 Locked - Click to enter PIN';
+    }
+    if (spBtn) {
+      spBtn.style.opacity = '0.6';
+    }
+    if (offsetBtn) {
+      offsetBtn.disabled = true;
+      offsetBtn.title = 'Unlock parameters first to edit DB Offsets';
+    }
   } else {
-    lockBtn.innerHTML  = '🔓 Unlocked';
-    lockBtn.className  = 'btn btn-success btn-sm';
+    if (lockBtn) {
+      lockBtn.innerHTML  = '🔓 Unlocked';
+      lockBtn.className  = 'btn btn-success btn-sm';
+    }
     if (lockBnr)  lockBnr.style.display = 'none';
     if (writeBtn) { writeBtn.disabled = false; writeBtn.title = ''; }
     if (statusLb) statusLb.textContent = '🔓 Unlocked — Lock after changes!';
+    if (spBadge) {
+      spBadge.textContent = '🔓 Unlocked';
+      spBadge.style.color = 'var(--green)';
+    }
+    if (spInput) {
+      spInput.readOnly = false;
+      spInput.style.cursor = 'text';
+      spInput.style.opacity = '1';
+      spInput.title = 'Enter desired Setpoint value';
+    }
+    if (spBtn) {
+      spBtn.style.opacity = '1';
+    }
+    if (offsetBtn) {
+      offsetBtn.disabled = false;
+      offsetBtn.title = 'Configure DB Offsets';
+    }
+    resetAutoLockTimer();
   }
 
+  // Lock advanced PID parameters
   document.querySelectorAll('.param-input').forEach(inp => {
     inp.disabled     = locked;
     inp.style.cursor  = locked ? 'not-allowed' : '';
@@ -1464,9 +1568,26 @@ function confirmChangePin() {
   const newPin   = document.getElementById('cpNewPin').value;
   const confirm2 = document.getElementById('cpConfirmPin').value;
   const errEl    = document.getElementById('cpError');
-  if (hashPin(oldPin) !== getStoredPin()) { errEl.textContent='❌ Current PIN incorrect'; errEl.style.display='block'; return; }
-  if (newPin.length < 4)                  { errEl.textContent='❌ PIN must be ≥ 4 digits'; errEl.style.display='block'; return; }
-  if (newPin !== confirm2)                { errEl.textContent='❌ PINs do not match';      errEl.style.display='block'; return; }
+  if (!oldPin) {
+    errEl.textContent = '❌ Please enter current PIN (Default: 1234)';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (hashPin(oldPin) !== getStoredPin()) {
+    errEl.textContent = '❌ Current PIN incorrect';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPin.length < 4) {
+    errEl.textContent = '❌ New PIN must be at least 4 digits';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPin !== confirm2) {
+    errEl.textContent = '❌ New PIN and confirmation do not match';
+    errEl.style.display = 'block';
+    return;
+  }
   localStorage.setItem(PIN_KEY, hashPin(newPin));
   closeModal('changePinModal');
   toast('PIN changed successfully 🔑', 'success');
