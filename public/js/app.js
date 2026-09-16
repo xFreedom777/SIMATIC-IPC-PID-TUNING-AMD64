@@ -95,21 +95,11 @@ const DEFAULT_OFFSETS = {
 };
 let currentOffsets = { ...DEFAULT_OFFSETS };
 
-// ── Smart Idle & Memory Auto-Refresh (5-Min Kiosk Auto-Clean) ───
+// ── Smart Activity Tracker (Dell OptiPlex 3000 / 16GB RAM - 24/7 Continuous Mode) ───
 let lastUserActivityTime = Date.now();
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 mins
-
 ['click', 'touchstart', 'keydown'].forEach(evt => {
   window.addEventListener(evt, () => { lastUserActivityTime = Date.now(); }, { passive: true });
 });
-
-setInterval(() => {
-  const isIdle = (Date.now() - lastUserActivityTime) >= IDLE_TIMEOUT_MS;
-  if (isIdle && State.paramLocked) {
-    console.log('🌙 System idle for 5 mins with locked params. Refreshing Kiosk UI for V8 heap cleanup...');
-    window.location.reload();
-  }
-}, 15000);
 
 // ══════════════════════════════════════════════
 // Init
@@ -335,10 +325,13 @@ async function fetchStatus() {
     bdata.blocks.forEach(b => {
       State.blocks[b.id] = b;
       if (!State.chartData[b.id]) {
-        State.chartData[b.id] = { sp:[], pv:[], out:[], labels:[] };
+        State.chartData[b.id] = { sp:[], pv:[], smoothPv:[], pvMin:[], pvMax:[], out:[], labels:[] };
       }
     });
     renderBlockList();
+    if (!State.selectedBlockId && bdata.blocks.length > 0) {
+      selectBlock(bdata.blocks[0].id);
+    }
   } catch (err) {
     if (State.mode !== 'disconnected') {
       State.mode = 'disconnected';
@@ -552,12 +545,13 @@ async function moveBlock(id, dir, event) {
   }
 }
 
-function selectBlock(id) {
+async function selectBlock(id) {
   State.selectedBlockId = id;
   document.querySelectorAll('.block-item').forEach(el => el.classList.remove('active'));
   const item = document.getElementById(`blockItem_${id}`);
   if (item) item.classList.add('active');
   const block = State.blocks[id];
+  if (!block) return;
   const pvUnit = block.pvUnit || '';
   const spUnit = block.spUnit || pvUnit;
   document.getElementById('lv-sp-unit').textContent   = spUnit;
@@ -569,6 +563,45 @@ function selectBlock(id) {
   if (live) updateLiveDisplay(live.sp, live.pv, live.output, live.mode, live.state, live.errorBits);
   renderParams(block);
   updateScaleLabels(pvUnit || spUnit);
+
+  // ── Instant History Load: Pull past 600 points from Server RAM on select ──
+  if (!State.chartData[id] || State.chartData[id].pv.length === 0) {
+    try {
+      const hist = await api('GET', `/api/blocks/${id}/history?limit=600`);
+      if (hist && hist.data && hist.data.length > 0) {
+        if (!State.chartData[id]) {
+          State.chartData[id] = { sp:[], pv:[], smoothPv:[], pvMin:[], pvMax:[], out:[], labels:[] };
+        }
+        const cd = State.chartData[id];
+        hist.data.forEach(pt => {
+          const label = new Date(pt.timestamp).toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+          const numSp = Number(pt.sp || 0);
+          const numPv = Number(pt.pv || 0);
+          const numOut = Number(pt.output || 0);
+
+          const alpha = State.chartAlpha || 0.15;
+          const lastEma = cd.smoothPv.length > 0 ? cd.smoothPv[cd.smoothPv.length - 1] : numPv;
+          const smoothVal = Number(((numPv * alpha) + (lastEma * (1 - alpha))).toFixed(2));
+
+          const recentSlice = cd.pv.slice(Math.max(0, cd.pv.length - 15));
+          recentSlice.push(numPv);
+          const minVal = Number(Math.min(...recentSlice).toFixed(2));
+          const maxVal = Number(Math.max(...recentSlice).toFixed(2));
+
+          cd.sp.push(numSp);
+          cd.pv.push(numPv);
+          cd.smoothPv.push(smoothVal);
+          cd.pvMin.push(minVal);
+          cd.pvMax.push(maxVal);
+          cd.out.push(numOut);
+          cd.labels.push(label);
+        });
+      }
+    } catch (e) {
+      console.warn('[History] Could not load history for block:', id, e);
+    }
+  }
+
   rebuildChart(id);
   document.getElementById('paramActions').style.display = 'flex';
 }
@@ -2403,81 +2436,28 @@ function scheduleAutoConnect(delay = 5000) {
   }, delay);
 }
 
-// ── Feature 3: Auto-Select first loop countdown (ORANGE ring, 20s) ──
-(function autoSelectLoop() {
-  let countdown = 20;
-  let cancelled = false;
-  let timer = null;
-  let started = false;
-
-  function cancel() {
-    if (cancelled) return;
-    cancelled = true;
-    clearInterval(timer);
-    const badge = document.getElementById('autoLoopBadge');
-    if (badge) badge.remove();
-    const firstItem = document.querySelector('.block-item');
-    if (firstItem) firstItem.classList.remove('ring-orange');
+// ── Feature 3: Instant 0-Second Auto-Select First PID Loop ──
+function instantAutoSelectLoop() {
+  const ids = Object.keys(State.blocks);
+  if (ids.length > 0 && !State.selectedBlockId) {
+    selectBlock(ids[0]);
   }
+}
 
-  function startLoopCountdown() {
-    if (started || cancelled) return;
-    started = true;
-
-    setTimeout(() => {
-      if (cancelled || State.selectedBlockId) return;
-      const firstItem = document.querySelector('.block-item');
-      if (!firstItem) return;
-
-      // Orange ring on first loop item
-      firstItem.style.position = 'relative';
-      firstItem.classList.add('ring-orange');
-      const badge = document.createElement('div');
-      badge.id = 'autoLoopBadge';
-      badge.className = 'countdown-badge';
-      badge.style.background = '#f97316';
-      badge.textContent = countdown;
-      firstItem.appendChild(badge);
-
-      // Cancel if user clicks any block
-      document.querySelectorAll('.block-item').forEach(el => {
-        el.addEventListener('click', cancel, { once: true });
-      });
-
-      timer = setInterval(() => {
-        if (cancelled || State.selectedBlockId) { cancel(); return; }
-        countdown--;
-        badge.textContent = countdown;
-        if (countdown <= 0) {
-          cancel();
-          const ids = Object.keys(State.blocks);
-          if (ids.length > 0 && !State.selectedBlockId) {
-            toast('🤖 Auto-Select: Selecting first PID loop...', 'info', 2000);
-            selectBlock(ids[0]);
-          }
-        }
-      }, 1000);
-    }, 1500);
+// Watch for blocks load and auto-select instantly (0s delay)
+const origOnStatus = window._origOnStatus || onStatus;
+window._origOnStatus = origOnStatus;
+setInterval(() => {
+  if (!State.selectedBlockId && Object.keys(State.blocks).length > 0) {
+    instantAutoSelectLoop();
   }
+}, 500);
 
-  // Watch for PLC connect then start orange countdown
-  const origOnStatus = window._origOnStatus || onStatus;
-  window._origOnStatus = origOnStatus;
-  // Poll for connect state every 500ms
-  const watchConnect = setInterval(() => {
-    if (cancelled) { clearInterval(watchConnect); return; }
-    if (State.mode === 'plc') {
-      clearInterval(watchConnect);
-      startLoopCountdown();
-    }
-  }, 500);
-})();
-
-// KIOSK BEHAVIOR: Always auto-connect on boot after 2 seconds if not connected
+// KIOSK BEHAVIOR: Always auto-connect to PLC on boot immediately (2s delay)
 setTimeout(() => {
   if (State.mode === 'disconnected') {
-    toast('Kiosk Boot: Initiating Auto-Connect...', 'info', 3000);
-    scheduleAutoConnect(20000);
+    toast('⚡ Kiosk Boot: Auto-Connecting to PLC...', 'info', 3000);
+    scheduleAutoConnect(2000);
   }
-}, 2000);
+}, 1000);
 
