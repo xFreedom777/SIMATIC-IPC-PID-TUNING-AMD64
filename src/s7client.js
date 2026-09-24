@@ -6,49 +6,46 @@ const NodeS7 = require('nodes7');
 
 // Default PIDCompact V2 byte offsets (approximate - user should verify in TIA DB view)
 const DEFAULT_OFFSETS = {
-  // ─── Input Section ───────────────────────────────
-  setpoint:            0,   // Real (4 bytes) — Setpoint
-  input:               4,   // Real (4 bytes) — Raw input (before scaling)
-  // input_PER:         8,   // Word (2 bytes) — Peripheral input (unused if using 'Input')
-  disturbance:        10,   // Real (4 bytes) — Disturbance (feedforward)
-  manualValue:        14,   // Real (4 bytes) — Manual output value
-  errorAck:           18,   // Bool bit 0     — Reset error acknowledgement
-  reset:              18,   // Bool bit 1     — Reset PID
-  modeActivate:       18,   // Bool bit 2     — Trigger mode change (rising edge)
+  // ── Input Section ──
+  setpoint:            0,   // Real (4 bytes) – Setpoint
+  input:               4,   // Real (4 bytes) – Raw input (before scaling)
+  disturbance:        10,   // Real (4 bytes) – Disturbance (feedforward)
+  manualValue:        14,   // Real (4 bytes) – Manual output value
+  errorAck:           18,   // Bool bit 0     – Reset error acknowledgement
+  reset:              18,   // Bool bit 1     – Reset PID
+  modeActivate:       18,   // Bool bit 2     – Trigger mode change (rising edge)
 
-  // ─── Output Section ──────────────────────────────
-  scaledInput:        20,   // Real (4 bytes) — Scaled process value (PV display)
-  output:             24,   // Real (4 bytes) — Controller output (%)
-  // output_PER:       28,   // Word (2 bytes) — Peripheral output (%)
-  setpointLimit_H:    30,   // Bool bit 0     — SP high limit reached
-  setpointLimit_L:    30,   // Bool bit 1     — SP low limit reached
-  inputWarning_H:     30,   // Bool bit 2     — PV high warning
-  inputWarning_L:     30,   // Bool bit 3     — PV low warning
-  state:              32,   // Int  (2 bytes) — PID state (0=Inactive,3=Auto,4=Manual)
-  error_bit:          34,   // Bool bit 0     — Error flag
-  errorBits:          36,   // DWord (4 bytes)— Error code
+  // ── Output Section ──
+  scaledInput:        20,   // Real (4 bytes) – Scaled process value (PV display)
+  output:             24,   // Real (4 bytes) – Controller output (%)
+  setpointLimit_H:    30,   // Bool bit 0     – SP high limit reached
+  setpointLimit_L:    30,   // Bool bit 1     – SP low limit reached
+  inputWarning_H:     30,   // Bool bit 2     – PV high warning
+  inputWarning_L:     30,   // Bool bit 3     – PV low warning
+  state:              32,   // Int  (2 bytes) – PID state (0=Inactive,3=Auto,4=Manual)
+  error_bit:          34,   // Bool bit 0     – Error flag
+  errorBits:          36,   // DWord (4 bytes)– Error code
 
-  // ─── InOut Section ───────────────────────────────
-  mode:               40,   // Int  (2 bytes) — Mode (0=Inactive,3=Auto,4=Manual,5=Hold)
+  // ── InOut Section ──
+  mode:               40,   // Int  (2 bytes) – Mode (0=Inactive,3=Auto,4=Manual,5=Hold)
 
-  // ─── Static / Retain Section ─────────────────────
-  // *** These depend on the compiled DB. Verify in TIA → DB Editor → Offset column ***
-  gain:               50,   // Real — Kp (Proportional gain)
-  ti:                 54,   // Real — Ti (Integration time, seconds)
-  td:                 58,   // Real — Td (Derivative time, seconds)
-  tdFiltRatio:        62,   // Real — Derivative filter coefficient (0–1)
-  pWeighting:         66,   // Real — P-action weighting (0=SP,1=Error)
-  dWeighting:         70,   // Real — D-action weighting (0=PV,1=Error)
-  cycle:              74,   // Real — Sample time (seconds)
-  setpointUpperLimit: 78,   // Real — SP upper limit
-  setpointLowerLimit: 82,   // Real — SP lower limit
-  outputUpperLimit:   86,   // Real — Output upper limit (%)
-  outputLowerLimit:   90,   // Real — Output lower limit (%)
+  // ── Static / Retain Section ──
+  gain:               50,   // Real – Kp (Proportional gain)
+  ti:                 54,   // Real – Ti (Integration time, seconds)
+  td:                 58,   // Real – Td (Derivative time, seconds)
+  tdFiltRatio:        62,   // Real – Derivative filter coefficient (0–1)
+  pWeighting:         66,   // Real – P-action weighting (0=SP,1=Error)
+  dWeighting:         70,   // Real – D-action weighting (0=PV,1=Error)
+  cycle:              74,   // Real – Sample time (seconds)
+  setpointUpperLimit: 78,   // Real – SP upper limit
+  setpointLowerLimit: 82,   // Real – SP lower limit
+  outputUpperLimit:   86,   // Real – Output upper limit (%)
+  outputLowerLimit:   90,   // Real – Output lower limit (%)
 
-  // ─── Config Section ──────────────────────────────
-  inputUpperLimit:   100,   // Real — PV scaling upper limit
-  inputLowerLimit:   104,   // Real — PV scaling lower limit
-  invertControl:     116,   // Bool — Reverse acting (heating=false, cooling=true)
+  // ── Config Section ──
+  inputUpperLimit:   100,   // Real – PV scaling upper limit
+  inputLowerLimit:   104,   // Real – PV scaling lower limit
+  invertControl:     116,   // Bool – Reverse acting (heating=false, cooling=true)
 };
 
 class S7Client {
@@ -85,18 +82,19 @@ class S7Client {
       this.conn = new NodeS7({ silent: true });
       this.connectParams = opts;
 
-      // S7-1200: rack=0, slot=0 (TSAP=0x0300)
+      // S7-1200: rack=0, slot=0 or 1 (TSAP=0x0300)
       this.conn.initiateConnection({
         port:        102,
         host:        opts.host,
         rack:        (opts.rack != null ? opts.rack : 0),
-        slot:        (opts.slot != null ? opts.slot : 0),
+        slot:        (opts.slot != null ? opts.slot : 1),
         localTSAP:   0x0100,
         remoteTSAP:  0x0300,
-        timeout:     8000,
+        timeout:     4000,
       }, (err) => {
         if (err) {
           this.connected = false;
+          this._drop();
           return reject(new Error(`S7 connection failed: ${err}`));
         }
         this.connected = true;
@@ -110,16 +108,23 @@ class S7Client {
   }
 
   _drop() {
-    try { if (this.conn) this.conn.dropConnection(); } catch (_) {}
+    try {
+      if (this.conn) {
+        this.conn.dropConnection();
+        if (this.conn.isoConnection && typeof this.conn.isoConnection.destroy === 'function') {
+          this.conn.isoConnection.destroy();
+        }
+      }
+    } catch (_) {}
     this.conn = null;
     this.connected = false;
     this.addedTags.clear();
   }
 
-  // Generic multi-tag read
+  // Generic multi-tag read with internal timeout guard
   _read(tags) {
     return new Promise((resolve, reject) => {
-      if (!this.connected || !this.conn) return reject(new Error('Not connected'));
+      if (!this.connected || !this.conn) return reject(new Error('Not connected to PLC'));
       const keys = Object.keys(tags);
       const tagArr = keys.map(k => tags[k]);
       
@@ -134,14 +139,27 @@ class S7Client {
       } catch (err) {
         return reject(new Error(`addItems failed: ${err.message}`));
       }
-      
+
+      let timer = null;
+      let completed = false;
+
+      timer = setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          return reject(new Error('PLC Read Timeout (2500ms exceeded)'));
+        }
+      }, 2500);
+
       this.conn.readAllItems((err, values) => {
-        // We do not reject immediately on err=true because some tags might be valid.
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+
         const result = {};
         let allBad = true;
         
         keys.forEach(k => {
-          const val = values[tags[k]];
+          const val = values ? values[tags[k]] : null;
           if (val === undefined || (typeof val === 'string' && val.startsWith('BAD'))) {
             result[k] = null;
           } else {
@@ -161,7 +179,7 @@ class S7Client {
   // Generic multi-tag write
   _write(tagArr, valueArr) {
     return new Promise((resolve, reject) => {
-      if (!this.connected || !this.conn) return reject(new Error('Not connected'));
+      if (!this.connected || !this.conn) return reject(new Error('Not connected to PLC'));
       this.conn.writeItems(tagArr, valueArr, (err) => {
         if (err) return reject(new Error(`Write error: ${err}`));
         resolve();
@@ -169,7 +187,7 @@ class S7Client {
     });
   }
 
-  // Read monitoring values (fast poll: SP, PV, Output, Mode, State)
+  // Read monitoring values (single loop)
   async readMonitorValues(db, offsets) {
     const o = { ...DEFAULT_OFFSETS, ...offsets };
     return this._read({
@@ -182,7 +200,7 @@ class S7Client {
     });
   }
 
-  // Read all blocks in a single batch request to dramatically reduce CPU & Network IO
+  // Read all blocks in a SINGLE BATCH PDU request to dramatically reduce S7-1200 CPU & Network IO
   async readAllBlocksMonitorValues(blocks) {
     const tags = {};
     for (const id of Object.keys(blocks)) {
@@ -200,13 +218,13 @@ class S7Client {
     if (Object.keys(tags).length === 0) return {};
 
     const rawData = await this._read(tags);
+    if (!rawData) return {};
     
     // Group the flat response back into individual block objects
     const result = {};
     for (const id of Object.keys(blocks)) {
       if (blocks[id].disabled) continue;
-      // If the primary tag is missing/bad, we assume the whole block is unreadable this cycle
-      if (rawData[`${id}_sp`] === null) {
+      if (rawData[`${id}_sp`] === null && rawData[`${id}_pv`] === null) {
         result[id] = null;
         continue;
       }
@@ -221,7 +239,6 @@ class S7Client {
     }
     return result;
   }
-
 
   // Read all tuning parameters
   async readPIDParams(db, offsets) {
@@ -314,7 +331,6 @@ class S7Client {
   }
 
   // Read DTL DateTime from S7 PLC DB (Default: DB120 at offset 0.0)
-  // Read DTL DateTime from S7 PLC DB (Default: DB120 at offset 0.0)
   async readPlcDateTime(dbNumber = 120, startOffset = 0) {
     try {
       const d = await this._read({
@@ -345,11 +361,9 @@ class S7Client {
       const dateStr = `${y}-${pad(m)}-${pad(day)} ${pad(h)}:${pad(min)}:${pad(s)}`;
       return dateStr;
     } catch (err) {
-      console.error('[s7client] readPlcDateTime error:', err.message);
       return null;
     }
   }
-
 }
 
 module.exports = { S7Client, DEFAULT_OFFSETS };

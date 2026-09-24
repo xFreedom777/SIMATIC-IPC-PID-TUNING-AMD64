@@ -1,4 +1,3 @@
-
 function executeUsbMount(callback) {
   const exec = require('child_process').exec;
   const script = `
@@ -28,7 +27,6 @@ for dev in /dev/sda1 /dev/sdb1 /dev/sdc1 /dev/sda /dev/sdb /dev/sdc; do
 done
 
 if [ $MOUNTED -eq 0 ]; then
-  # Try explicit mount on /dev/sda1 to capture the exact error message
   if [ -b /dev/sda1 ]; then
     mount /dev/sda1 /media/usb
   else
@@ -70,7 +68,7 @@ function getLocalLogTime(timestamp = Date.now()) {
   };
 }
 
-// server.js — PID Tuning App Backend
+// server.js – PID Tuning App Backend (24/7 Industrial Grade Self-Healing)
 // Express + WebSocket + S7-1200 + FOPDT Simulator
 
 const express  = require('express');
@@ -91,7 +89,7 @@ const LOGS_DIR = path.join(__dirname, 'logs');
 
 // Ensure logs directory exists
 if (!fs.existsSync(LOGS_DIR)) {
-  fs.mkdirSync(LOGS_DIR);
+  fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
 app.use((req, res, next) => {
@@ -103,14 +101,15 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
 // ═══════════════════════════════════════════════
 // App State
 // ═══════════════════════════════════════════════
 let s7 = null;
 let sim = null;
-let appMode = 'disconnected';   // 'disconnected' | 'plc' | 'simulation'
+let appMode = 'disconnected';   // 'disconnected' | 'plc' | 'simulation' | 'reconnecting'
 let blocks = {};                // blockId → block object
-let appConfig = { plcIp: '192.168.1.10', plcRack: 0, plcSlot: 0 };
+let appConfig = { plcIp: '192.168.121.211', plcRack: 0, plcSlot: 1 };
 
 const BLOCKS_FILE = path.join(__dirname, 'data', 'blocks.json');
 const CONFIG_FILE = path.join(__dirname, 'data', 'config.json');
@@ -161,18 +160,20 @@ loadBlocks();
 loadConfig();
 let history = {};               // blockId → [{sp,pv,output,mode,timestamp}]
 let pollerTimer = null;
-const POLL_MS      = 250;       // Optimized 250ms (4Hz) Balanced Polling
+const POLL_MS      = 500;       // Balanced 500ms (2Hz) High-Reliability Polling
 const MAX_HISTORY  = 2000;
 
-const LOG_INTERVAL_MS = 5000;
 let lastLogTime = {};
+let consecutiveErrors = 0;
+let isConnecting = false;
+let userDisconnected = false;   // Only true if user deliberately clicked Disconnect and auto-reconnect hasn't resumed
 
 // ─── WebSocket broadcast ──────────────────────
 function broadcast(data) {
   const msg = JSON.stringify(data);
   wss.clients.forEach(c => {
     if (c.readyState === WebSocket.OPEN) {
-      if (c.bufferedAmount > 1024 * 1024) { // 1MB backpressure limit
+      if (c.bufferedAmount > 1024 * 1024) {
         console.warn('[WebSocket] Client dropped due to high backpressure (RAM protection)');
         c.terminate();
       } else {
@@ -186,7 +187,6 @@ function broadcast(data) {
 // S7-1200 Hardware RTC Time Sync (DB120 offset 0.0 DTL)
 // ═══════════════════════════════════════════════
 let lastSyncedPlcTime = '';
-let lastTimeSyncCheck = 0;
 let syncRetryCount = 0;
 
 async function syncTimeFromPLC() {
@@ -195,19 +195,16 @@ async function syncTimeFromPLC() {
     const plcTimeStr = await s7.readPlcDateTime(120, 0);
     if (!plcTimeStr) {
       if (syncRetryCount < 3) {
-        console.warn('[TimeSync] ⚠️ Waiting for valid DTL time from S7 DB120 offset 0.0...');
         syncRetryCount++;
       }
       return;
     }
 
-    // Safety Guard 1: If time hasn't changed (PLC in STOP or block not executed)
     if (plcTimeStr === lastSyncedPlcTime) return;
 
     const plcTimestamp = new Date(plcTimeStr).getTime();
     const currentLinuxTimestamp = Date.now();
 
-    // Safety Guard 2: Skip if Linux time already matches within 3 seconds
     if (Math.abs(currentLinuxTimestamp - plcTimestamp) < 3000) {
       lastSyncedPlcTime = plcTimeStr;
       return;
@@ -216,22 +213,19 @@ async function syncTimeFromPLC() {
     lastSyncedPlcTime = plcTimeStr;
     console.log(`[TimeSync] 🕒 Syncing Linux system time from S7-1200 (DB120): ${plcTimeStr}`);
 
-    // Ensure NTP is disabled so Linux kernel allows setting date manually
     const cmd = `timedatectl set-ntp false 2>/dev/null || true; timedatectl set-timezone Asia/Bangkok 2>/dev/null || true; date -s "${plcTimeStr}" && hwclock -w >/dev/null 2>&1 || true`;
-    require('child_process').exec(cmd, (err, stdout, stderr) => {
+    require('child_process').exec(cmd, (err) => {
       if (!err) {
         console.log(`[TimeSync] ✅ Linux System Time Synced Successfully to: ${plcTimeStr}`);
         broadcast({ type: 'time_synced', time: plcTimeStr });
-      } else {
-        console.error(`[TimeSync] ❌ Time sync execution error:`, err.message || stderr);
       }
     });
   } catch (err) {
-    console.error('[TimeSync] Error:', err.message);
+    // Non-blocking
   }
 }
 
-// Periodic S7 Time Sync every 5 minutes (and aggressive retry on startup)
+// Periodic S7 Time Sync every 5 minutes
 setInterval(syncTimeFromPLC, 5 * 60 * 1000);
 
 // ─── Default block offsets ────────────────────
@@ -240,53 +234,108 @@ function defaultOffsets() {
 }
 
 // ═══════════════════════════════════════════════
+// Autonomous Connection Core Function
+// ═══════════════════════════════════════════════
+async function connectToPlc(ip, rack = 0, slot = 1) {
+  if (isConnecting) return false;
+  isConnecting = true;
+  try {
+    if (s7) {
+      try { s7.disconnect(); } catch (_) {}
+      s7 = null;
+    }
+
+    const client = new S7Client();
+    const connectPromise = client.connect({ host: ip, rack: parseInt(rack), slot: parseInt(slot) });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('PLC Connection Timeout')), 4000));
+    await Promise.race([connectPromise, timeoutPromise]);
+
+    s7 = client;
+    appMode = 'plc';
+    consecutiveErrors = 0;
+    userDisconnected = false;
+    console.log(`[PLC Connection] ✅ Connected to S7-1200 at ${ip} (Rack ${rack}, Slot ${slot})`);
+    
+    broadcast({ type: 'status', connected: true, mode: 'plc', plcIp: ip });
+    startPoller();
+    // Trigger one initial time sync
+    setTimeout(syncTimeFromPLC, 1000);
+    return true;
+  } catch (err) {
+    if (s7) {
+      try { s7.disconnect(); } catch (_) {}
+      s7 = null;
+    }
+    if (appMode === 'plc') {
+      appMode = 'disconnected';
+      broadcast({ type: 'status', connected: false, mode: 'disconnected', reason: err.message });
+    }
+    throw err;
+  } finally {
+    isConnecting = false;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// 24/7 Autonomous Background Auto-Reconnect Daemon
+// ═══════════════════════════════════════════════
+setInterval(() => {
+  if (appMode === 'disconnected' || appMode === 'reconnecting') {
+    if (appConfig.plcIp && !isConnecting && !userDisconnected) {
+      connectToPlc(appConfig.plcIp, appConfig.plcRack, appConfig.plcSlot).catch(err => {
+        // Silent retry
+      });
+    }
+  }
+}, 5000);
+
+// Auto-connect on startup
+if (appConfig.plcIp) {
+  setTimeout(() => {
+    console.log(`[Startup] 🚀 Auto-connecting to PLC at ${appConfig.plcIp}...`);
+    connectToPlc(appConfig.plcIp, appConfig.plcRack, appConfig.plcSlot).catch(err => {
+      console.warn(`[Startup] Initial connection pending (${err.message}). Background daemon will auto-retry.`);
+    });
+  }, 1000);
+}
+
+// ═══════════════════════════════════════════════
 // REST API
 // ═══════════════════════════════════════════════
 
 // ── Connection ────────────────────────────────
 app.post('/api/connect', async (req, res) => {
-  const { ip, rack = 0, slot = 0 } = req.body;
+  const { ip, rack = 0, slot = 1 } = req.body;
   if (!ip) return res.status(400).json({ error: 'IP address required' });
 
   appConfig.plcIp = ip;
   appConfig.plcRack = rack;
   appConfig.plcSlot = slot;
   saveConfig();
+  userDisconnected = false;
 
   try {
-    if (s7) { s7.disconnect(); s7 = null; }
-
-    s7 = new S7Client();
-    const connectPromise = s7.connect({ host: ip, rack: parseInt(rack), slot: parseInt(slot) });
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('PLC Connection Timeout (PLC socket might be busy)')), 5000));
-    await Promise.race([connectPromise, timeoutPromise]);
-    
-    appMode = 'plc';
-
-    broadcast({ type: 'status', connected: true, mode: 'plc', plcIp: ip });
-    startPoller();
+    await connectToPlc(ip, rack, slot);
     res.json({ success: true });
   } catch (err) {
-    s7 = null;
-    appMode = 'disconnected';
     res.status(500).json({ error: err.message });
   }
 });
 
 app.delete('/api/connect', (req, res) => {
   try {
-    if (s7) { s7.disconnect(); s7 = null; }
-    appMode = 'disconnected';
+    userDisconnected = true;
+    // Allow user to temporarily disconnect; auto-reconnect resumes after 30s of inactivity if not reconnected
+    setTimeout(() => { userDisconnected = false; }, 30000);
+
+    stopPoller();
     if (s7) {
-      s7.dropConnection(() => {
-        s7 = null;
-        broadcast({ type: 'status', connected: false, mode: 'disconnected' });
-        res.json({ success: true });
-      });
-    } else {
-      broadcast({ type: 'status', connected: false, mode: 'disconnected' });
-      res.json({ success: true });
+      s7.disconnect();
+      s7 = null;
     }
+    appMode = 'disconnected';
+    broadcast({ type: 'status', connected: false, mode: 'disconnected' });
+    res.json({ success: true });
   } catch (err) {
     console.error('[Disconnect Error]:', err);
     broadcast({ type: 'status', connected: false, mode: 'disconnected' });
@@ -297,7 +346,7 @@ app.delete('/api/connect', (req, res) => {
 app.get('/api/status', (req, res) => {
   res.json({
     mode: appMode,
-    connected: appMode !== 'disconnected',
+    connected: appMode === 'plc' || appMode === 'simulation',
     blockCount: Object.keys(blocks).length,
     defaultOffsets: DEFAULT_OFFSETS,
     plcConfig: appConfig
@@ -310,7 +359,7 @@ app.get('/api/blocks', (req, res) => {
 });
 
 app.post('/api/blocks', (req, res) => {
-  const { name, dbNumber, pvUnit = '', spUnit = '', outputUnit = '%', offsets, logInterval = 5, logPath = '', logAutoClearMonths = 1 } = req.body;
+  const { name, dbNumber, pvUnit = '', spUnit = '', outputUnit = '%', offsets, logInterval = 5, logPath = '', logAutoClearMonths = 12 } = req.body;
   if (!dbNumber) return res.status(400).json({ error: 'DB number required' });
 
   const id = `blk_${Date.now()}`;
@@ -324,13 +373,12 @@ app.post('/api/blocks', (req, res) => {
     offsets:    { ...defaultOffsets(), ...Object.fromEntries(Object.entries(offsets || {}).filter(([_, v]) => v !== '' && v !== null && v !== undefined)) },
     logInterval: parseInt(logInterval) || 5,
     logPath:     logPath,
-    logAutoClearMonths: parseInt(logAutoClearMonths) || 1,
+    logAutoClearMonths: parseInt(logAutoClearMonths) || 12,
     params:     {},
     lastData:   null,
   };
   history[id] = [];
 
-  // If simulation running, add the loop
   if (appMode === 'simulation' && sim) {
     sim.addLoop(id, {
       kp:               (blocks[id].params.gain != null ? blocks[id].params.gain : 1),
@@ -359,7 +407,7 @@ app.put('/api/blocks/:id', (req, res) => {
   if (offsets)    b.offsets    = { ...b.offsets, ...Object.fromEntries(Object.entries(offsets || {}).filter(([_, v]) => v !== '' && v !== null && v !== undefined)) };
   if (logInterval !== undefined) b.logInterval = parseInt(logInterval) || 5;
   if (logPath !== undefined)     b.logPath = logPath;
-  if (logAutoClearMonths !== undefined) b.logAutoClearMonths = parseInt(logAutoClearMonths) || 1;
+  if (logAutoClearMonths !== undefined) b.logAutoClearMonths = parseInt(logAutoClearMonths) || 12;
 
   saveBlocks();
   res.json({ success: true, block: b });
@@ -382,13 +430,11 @@ app.post('/api/blocks/reorder', (req, res) => {
   if (!Array.isArray(order)) return res.status(400).json({ error: 'Order must be an array of IDs' });
 
   const newBlocks = {};
-  // Insert blocks in new order
   order.forEach(id => {
     if (blocks[id]) {
       newBlocks[id] = blocks[id];
     }
   });
-  // Append any missing blocks just in case
   Object.keys(blocks).forEach(id => {
     if (!newBlocks[id]) newBlocks[id] = blocks[id];
   });
@@ -585,18 +631,15 @@ app.get('/api/tune/imc', (req, res) => {
   const L  = parseFloat(req.query.L)      || 2;
   const lam = parseFloat(req.query.lambda) || Math.max(T * 0.2, L);
 
-  // IMC-based PID (for FOPDT)
   const Kp = T / (K * (lam + L));
   const Ti = T;
   const Td = L / 2;
 
-  // Cohen-Coon (classic)
   const rr  = L / T;
   const Kp_cc = (1 / K) * (T / L) * (4/3 + rr/4);
   const Ti_cc = L * (32 + 6*rr) / (13 + 8*rr);
   const Td_cc = 4 * L / (11 + 2*rr);
 
-  // Ziegler-Nichols (open-loop step)
   const Kp_zn = 1.2 / (K * rr);
   const Ti_zn = 2 * L;
   const Td_zn = 0.5 * L;
@@ -609,76 +652,71 @@ app.get('/api/tune/imc', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
-// Polling Loop (500ms)
+// Robust Single-Packet Batch Polling Loop (500ms)
 // ═══════════════════════════════════════════════
 let isPolling = false;
 function startPoller() {
   stopPoller();
-  isPolling = false; // Reset to prevent ghost connection lockup
+  isPolling = false;
+  consecutiveErrors = 0;
+
   pollerTimer = setInterval(async () => {
-    if (isPolling) return; // Prevent callback stacking if PLC response is delayed
+    if (isPolling) return; // Prevent overlapping ticks
     isPolling = true;
+
     try {
-      for (const id of Object.keys(blocks)) {
-        if (blocks[id].disabled) continue; // Optional skip if loop is disabled
+      if (appMode === 'plc') {
+        if (!s7) return;
+
+        // SINGLE-PACKET BATCH READ FOR ALL BLOCKS
+        let batchResults = null;
         try {
-          let data = null;
+          batchResults = await s7.readAllBlocksMonitorValues(blocks);
+          consecutiveErrors = 0; // Reset error streak on success
+        } catch (readErr) {
+          consecutiveErrors++;
+          console.warn(`[Poll] PLC read warning (Streak ${consecutiveErrors}): ${readErr.message}`);
 
-          if (appMode === 'plc' && s7) {
-            const readPromise = s7.readMonitorValues(blocks[id].dbNumber, blocks[id].offsets);
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('PLC Read Timeout')), 2000));
-            data = await Promise.race([readPromise, timeoutPromise]);
-          } else if (appMode === 'simulation' && sim) {
-            data = sim.step(id);
+          // Tolerates 1-2 minor hiccups. If 3 consecutive errors occur, trigger clean background socket reset
+          if (consecutiveErrors >= 3) {
+            console.error('[Poll] ⚠️ 3 consecutive PLC timeouts. Re-establishing socket in background...');
+            if (s7) {
+              try { s7.disconnect(); } catch (_) {}
+              s7 = null;
+            }
+            appMode = 'reconnecting';
+            broadcast({ type: 'status', connected: false, mode: 'reconnecting', reason: 'socket_reset' });
           }
+          return;
+        }
 
+        if (!batchResults) return;
+
+        const now = Date.now();
+        const { dateStr, timeStr } = getLocalLogTime(now);
+
+        for (const id of Object.keys(blocks)) {
+          if (blocks[id].disabled) continue;
+          const data = batchResults[id];
           if (!data) continue;
 
-          // ── S7-1200 DB120 Hardware Clock Sync (Every 5s inside poller sequence) ──
-          if (appMode === 'plc' && s7 && (Date.now() - lastTimeSyncCheck > 5000)) {
-            lastTimeSyncCheck = Date.now();
-            try {
-              const plcTimeStr = await s7.readPlcDateTime(120, 0);
-              if (plcTimeStr && plcTimeStr !== lastSyncedPlcTime) {
-                const plcTimestamp = new Date(plcTimeStr).getTime();
-                const currentLinuxTimestamp = Date.now();
-                if (Math.abs(currentLinuxTimestamp - plcTimestamp) > 3000) {
-                  lastSyncedPlcTime = plcTimeStr;
-                  console.log(`[TimeSync] 🕒 Auto-Syncing Linux system time from S7 DB120: ${plcTimeStr}`);
-                  const cmd = `timedatectl set-ntp false 2>/dev/null || true; timedatectl set-timezone Asia/Bangkok 2>/dev/null || true; date -s "${plcTimeStr}" && hwclock -w >/dev/null 2>&1 || true`;
-                  require('child_process').exec(cmd, (err) => {
-                    if (!err) {
-                      console.log(`[TimeSync] ✅ Linux System Time Synced: ${plcTimeStr}`);
-                      broadcast({ type: 'time_synced', time: plcTimeStr });
-                    }
-                  });
-                }
-              }
-            } catch (te) {}
-          }
-
-
-          const point = { ...data, timestamp: Date.now() };
+          const point = { ...data, timestamp: now };
           blocks[id].lastData = point;
 
           if (!history[id]) history[id] = [];
           history[id].push(point);
           if (history[id].length > MAX_HISTORY) history[id].shift();
 
-          // ── Data Logger (write to CSV asynchronously) ──
-          const now = Date.now();
+          // ── 24/7 Data Logger (Non-blocking CSV Append) ──
           const intervalMs = (blocks[id].logInterval || 5) * 1000;
           if (now - (lastLogTime[id] || 0) >= intervalMs) {
             lastLogTime[id] = now;
-            const { dateStr, timeStr } = getLocalLogTime(now);
             const blockNameSafe = blocks[id].name.replace(/\W+/g, '_');
             const fileName = `log_${blockNameSafe}_${dateStr}.csv`;
             
             let targetDir = LOGS_DIR;
             if (blocks[id].logPath && blocks[id].logPath.trim() !== '') {
               const p = blocks[id].logPath.trim();
-              // Safety Guard: If user entered /media/usb, always log to safe internal LOGS_DIR
-              // to prevent data loss or crashes when USB is unplugged.
               if (p === '/media/usb' || p === '/media/usb/' || p.startsWith('/media/usb')) {
                 targetDir = LOGS_DIR;
               } else {
@@ -696,10 +734,10 @@ function startPoller() {
               line += 'Time,Setpoint,ProcessValue,Output,Mode,State,ErrorBits\n';
             }
             const { sp, pv, output, mode, state, errorBits } = point;
-            const fSp = Number(sp||0).toFixed(2);
-            const fPv = Number(pv||0).toFixed(2);
-            const fOut = Number(output||0).toFixed(2);
-            line += `${timeStr},${fSp},${fPv},${fOut},${mode},${state},${errorBits||0}\n`;
+            const fSp = Number(sp || 0).toFixed(2);
+            const fPv = Number(pv || 0).toFixed(2);
+            const fOut = Number(output || 0).toFixed(2);
+            line += `${timeStr},${fSp},${fPv},${fOut},${mode},${state},${errorBits || 0}\n`;
             
             fs.appendFile(filePath, line, (err) => {
               if (err) console.error(`[Logger] Failed to write log for ${id}:`, err);
@@ -707,16 +745,22 @@ function startPoller() {
           }
 
           broadcast({ type: 'data', blockId: id, ...point });
-        } catch (err) {
-          console.error(`[Poll] ${id}:`, err.message);
-          if (appMode === 'plc') {
-            broadcast({ type: 'error', blockId: id, message: err.message });
-            if (err.message === 'PLC Read Timeout' || err.message.includes('Timeout')) {
-              appMode = 'disconnected';
-              if (s7) { s7.disconnect(); s7 = null; }
-              broadcast({ type: 'status', connected: false, mode: 'disconnected', reason: 'ghost_timeout' });
-            }
-          }
+        }
+      } else if (appMode === 'simulation' && sim) {
+        const now = Date.now();
+        for (const id of Object.keys(blocks)) {
+          if (blocks[id].disabled) continue;
+          const data = sim.step(id);
+          if (!data) continue;
+
+          const point = { ...data, timestamp: now };
+          blocks[id].lastData = point;
+
+          if (!history[id]) history[id] = [];
+          history[id].push(point);
+          if (history[id].length > MAX_HISTORY) history[id].shift();
+
+          broadcast({ type: 'data', blockId: id, ...point });
         }
       }
     } finally {
@@ -727,15 +771,15 @@ function startPoller() {
 
 function stopPoller() {
   if (pollerTimer) { clearInterval(pollerTimer); pollerTimer = null; }
+  isPolling = false;
 }
 
 // ═══════════════════════════════════════════════
-// WebSocket — send current state on connect
+// WebSocket Lifecycle
 // ═══════════════════════════════════════════════
 const pingInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
-      console.warn('[WebSocket] Client timeout. Terminating connection.');
       return ws.terminate();
     }
     ws.isAlive = false;
@@ -751,7 +795,7 @@ wss.on('connection', (ws) => {
 
   ws.send(JSON.stringify({
     type: 'status',
-    connected: appMode !== 'disconnected',
+    connected: appMode === 'plc' || appMode === 'simulation',
     mode: appMode,
   }));
 
@@ -793,13 +837,12 @@ app.post('/api/shutdown', (req, res) => {
     require('child_process').exec('poweroff', (err) => {
       if (err) console.error('Shutdown error:', err);
     });
-  }, 10000); // 10 seconds delay
+  }, 10000);
 });
 
 // ═══════════════════════════════════════════════
-// Set System Time Endpoint
+// System Time Endpoints
 // ═══════════════════════════════════════════════
-
 app.post('/api/system/sync-plc-time', async (req, res) => {
   if (!s7 || appMode !== 'plc') return res.status(400).json({ error: 'Not connected to PLC' });
   try {
@@ -838,9 +881,8 @@ app.post('/api/system/time', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
-// Start Server
+// Data Logging & USB APIs
 // ═══════════════════════════════════════════════
-// ── Data Logging APIs ──
 app.get('/api/drives', (req, res) => {
   const drives = [];
   try {
@@ -865,36 +907,29 @@ app.get('/api/drives', (req, res) => {
                   });
                 }
               }
-            } catch(e) {}
+            } catch (e) {}
           });
         }
       });
     }
-  } catch (err) { console.error('Drive detect error:', err); }
+  } catch (err) {}
   res.json({ drives });
 });
 
-// ── USB Management API (Robust Shell Helper Integration) ──
-app.get('/api/usb/status', (req, res) => {
-  require('child_process').exec("grep -qs '/media/usb ' /proc/mounts && echo 'YES' || echo 'NO'", (err, stdout) => {
-    res.json({ mounted: stdout && stdout.trim() === 'YES' });
-  });
-});
-
 app.post('/api/usb/mount', (req, res) => {
-  const mountScript = '/bin/bash /opt/pid-tuning-app/usb-mount-helper.sh';
-  require('child_process').exec(mountScript, (err, stdout, stderr) => {
+  const scriptPath = '/bin/bash /opt/pid-tuning-app/usb-mount-helper.sh';
+  require('child_process').exec(scriptPath, (err, stdout, stderr) => {
     const out = stdout ? stdout.trim() : '';
     if (out.includes('SUCCESS')) {
-      res.json({ success: true, message: 'USB Mounted Successfully!' });
+      res.json({ success: true, message: 'USB Drive Mounted Successfully at /media/usb' });
     } else {
       const errMsg = out.replace(/^ERROR:\s*/, '') || (stderr ? stderr.trim() : 'Failed to mount USB.');
-      res.status(400).json({ success: false, error: errMsg });
+      res.status(500).json({ success: false, error: errMsg });
     }
   });
 });
 
-app.post('/api/usb/eject', (req, res) => {
+app.post('/api/usb/unmount', (req, res) => {
   const unmountScript = '/bin/bash /opt/pid-tuning-app/usb-unmount-helper.sh';
   require('child_process').exec(unmountScript, (err, stdout, stderr) => {
     res.json({ success: true, message: 'USB Ejected Safely' });
@@ -907,7 +942,6 @@ app.post('/api/usb/save-all', (req, res) => {
   const USB_PATH = '/media/usb';
   const BACKUP_DIR = `${USB_PATH}/PID_Logs_Backup`;
 
-  // Step 1: Execute robust USB mount helper
   exec('/bin/bash /opt/pid-tuning-app/usb-mount-helper.sh', (mountErr, mountStdout, mountStderr) => {
     const out = mountStdout ? mountStdout.trim() : '';
     if (!out.includes('SUCCESS')) {
@@ -915,7 +949,6 @@ app.post('/api/usb/save-all', (req, res) => {
       return res.status(500).json({ success: false, error: errMsg });
     }
 
-    // Step 2: Create dated backup directory on USB
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
@@ -924,7 +957,6 @@ app.post('/api/usb/save-all', (req, res) => {
     exec(`mkdir -p "${backupFolder}"`, (err3) => {
       if (err3) return res.status(500).json({ success: false, error: 'Cannot create folder on USB: ' + err3.message });
 
-      // Step 3: Collect all CSV log paths
       const allLogDirs = new Set([LOGS_DIR]);
       Object.values(blocks).forEach(b => {
         if (b.logPath && b.logPath.trim()) allLogDirs.add(b.logPath.trim());
@@ -952,7 +984,6 @@ app.post('/api/usb/save-all', (req, res) => {
               if (filesDone === files.length) {
                 processed++;
                 if (processed === dirsArray.length) {
-                  // Step 4: Auto-generate Standalone Offline HTML Chart Viewer
                   try {
                     const { generateHtmlViewer } = require('./generate-usb-viewer.js');
                     generateHtmlViewer(backupFolder);
@@ -960,7 +991,6 @@ app.post('/api/usb/save-all', (req, res) => {
                     if (typeof generateUsbHtmlViewer === 'function') generateUsbHtmlViewer(backupFolder);
                   }
 
-                  // Step 5: Safely Unmount USB
                   exec('/bin/bash /opt/pid-tuning-app/usb-unmount-helper.sh', (ejErr) => {
                     const ejected = !ejErr;
                     res.json({
@@ -1011,16 +1041,17 @@ app.get('/api/logs/:id', (req, res) => {
     files.forEach(file => {
       if (file.startsWith(prefix) && file.endsWith('.csv')) {
         const filePath = path.join(targetDir, file);
-        const stats = fs.statSync(filePath);
-        logs.push({
-          filename: file,
-          size: stats.size,
-          mtime: stats.mtimeMs,
-          path: filePath
-        });
+        try {
+          const stats = fs.statSync(filePath);
+          logs.push({
+            filename: file,
+            size: stats.size,
+            mtime: stats.mtimeMs,
+            path: filePath
+          });
+        } catch (_) {}
       }
     });
-    // Sort descending by modified time
     logs.sort((a, b) => b.mtime - a.mtime);
     res.json({ logs });
   });
@@ -1046,14 +1077,14 @@ app.get('/api/logs/download/:id', (req, res) => {
   res.download(filePath, filename);
 });
 
-// ── Auto-Clear Logs Routine ──
+// ── Industrial Auto-Clear Logs Routine (Safe Retention) ──
 function autoClearLogs() {
-  console.log('[Auto-Clear] Running log cleanup task...');
+  console.log('[Auto-Clear] Checking log retention...');
   const now = Date.now();
   Object.values(blocks).forEach(b => {
-    const months = b.logAutoClearMonths || 1;
-    // Cap internal RAM storage to 7 days max (long-term data is backed up to USB)
-    const maxDays = Math.min(months * 30, 7);
+    // Retain logs according to user setting (default 12 months = 365 days, minimum 90 days)
+    const months = b.logAutoClearMonths || 12;
+    const maxDays = Math.max(months * 30, 90);
     const maxAgeMs = maxDays * 24 * 60 * 60 * 1000;
     
     let targetDir = LOGS_DIR;
@@ -1075,7 +1106,7 @@ function autoClearLogs() {
             if (err) return;
             if (now - stats.mtimeMs > maxAgeMs) {
               fs.unlink(filePath, err => {
-                if (!err) console.log(`[Auto-Clear] Deleted old log: ${filePath}`);
+                if (!err) console.log(`[Auto-Clear] Removed expired log (> ${maxDays} days): ${filePath}`);
               });
             }
           });
@@ -1088,7 +1119,6 @@ function autoClearLogs() {
 // Run auto-clear on startup, then every 24 hours
 setTimeout(autoClearLogs, 5000);
 setInterval(autoClearLogs, 24 * 60 * 60 * 1000);
-
 
 // ═══════════════════════════════════════════════
 // ── Dev.Connection Wi-Fi Management APIs ──

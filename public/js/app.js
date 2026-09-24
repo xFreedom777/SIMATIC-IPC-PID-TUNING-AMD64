@@ -423,6 +423,17 @@ function updateStatusUI() {
     simBtn.textContent = '⬛ Stop Simulation';
     readBtn.disabled = true;
     offsetBtn.disabled = true;
+  } else if (m === 'reconnecting') {
+    if (overlay) overlay.style.display = 'none';
+    statusTxt.textContent = '🔄 Auto-Reconnecting to PLC...';
+    modeChip.textContent  = 'RETRYING';
+    modeChip.className    = 'mode-chip offline';
+    connectBtn.innerHTML  = '<span>⏳</span> Reconnecting...';
+    connectBtn.classList.remove('btn-danger');
+    connectBtn.classList.add('btn-primary');
+    simBtn.disabled = true;
+    readBtn.disabled = true;
+    offsetBtn.disabled = true;
   } else {
     if (overlay) overlay.style.display = 'flex';
     statusTxt.textContent = 'Disconnected';
@@ -773,6 +784,23 @@ async function writeAllParams() {
 // ══════════════════════════════════════════════
 async function setPIDMode(mode) {
   if (!State.selectedBlockId) return toast('Select a PID loop first', 'warning');
+
+  // ── Protection: Auto Mode requires PIN unlock + Safety Interlock ──
+  if (mode === 3) {
+    if (State.paramLocked) {
+      toast('🔒 Auto Mode is PIN Protected — Please unlock with PIN first', 'warning');
+      toggleParamLock();
+      return;
+    }
+
+    // Safety Interlock: Check if motor current PV is too low
+    const currentData = State.lastLiveData[State.selectedBlockId];
+    if (currentData && currentData.pv !== undefined && Number(currentData.pv) < 5.0) {
+      const confirmAuto = confirm('⚠️ คำเตือนความปลอดภัย (Pinmill Protection):\n\nขณะนี้กระแสมอเตอร์วัดได้ต่ำมาก (' + Number(currentData.pv).toFixed(2) + ' Amp)\nหากเข้าโหมด Auto ในขณะที่เครื่องยังไม่มีโหลด วาล์วจะเร่งเปิดสุด 100% ทันที ซึ่งอาจทำให้ Pinmill พังเสียหายได้\n\nต้องการยืนยันบังคับเปิด Auto จริงหรือไม่?');
+      if (!confirmAuto) return;
+    }
+  }
+
   try {
     await api('POST', `/api/blocks/${State.selectedBlockId}/mode`, { mode });
     const names = { 0:'Inactive', 3:'Auto', 4:'Manual', 5:'Hold' };
@@ -1518,6 +1546,7 @@ function applyLockState() {
   const manualInput  = document.getElementById('manualInput');
   const manualSlider = document.getElementById('manualSlider');
   const offsetBtn    = document.getElementById('offsetBtn');
+  const modeAuto     = document.getElementById('modeAuto');
 
   // Manual Output is NEVER locked (always accessible for operator safety)
   if (manualInput) {
@@ -1554,6 +1583,11 @@ function applyLockState() {
       offsetBtn.disabled = true;
       offsetBtn.title = 'Unlock parameters first to edit DB Offsets';
     }
+    if (modeAuto) {
+      modeAuto.innerHTML = '🔒 Auto';
+      modeAuto.title = '🔒 Auto Mode Locked — Enter PIN to unlock';
+      modeAuto.style.opacity = '0.65';
+    }
   } else {
     if (lockBtn) {
       lockBtn.innerHTML  = '🔓 Unlocked';
@@ -1578,6 +1612,11 @@ function applyLockState() {
     if (offsetBtn) {
       offsetBtn.disabled = false;
       offsetBtn.title = 'Configure DB Offsets';
+    }
+    if (modeAuto) {
+      modeAuto.innerHTML = '▶ Auto';
+      modeAuto.title = 'Switch to Auto Mode';
+      modeAuto.style.opacity = '1';
     }
     resetAutoLockTimer();
   }
